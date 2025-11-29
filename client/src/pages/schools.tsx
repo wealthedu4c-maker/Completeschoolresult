@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Plus, Edit, Trash2, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Power, PowerOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -20,6 +20,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SchoolForm } from "@/components/schools/SchoolForm";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -67,6 +72,21 @@ export default function Schools() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/schools"] });
       toast({ title: "Success", description: "School deleted successfully" });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest("PATCH", `/api/schools/${id}/status`, { isActive }),
+    onSuccess: (_, { isActive }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/schools"] });
+      toast({ 
+        title: "Success", 
+        description: `School ${isActive ? "activated" : "deactivated"} successfully` 
+      });
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "Error", description: error.message });
@@ -162,29 +182,64 @@ export default function Schools() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedSchool(school);
-                            setDialogOpen(true);
-                          }}
-                          data-testid={`button-edit-${school.id}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (confirm("Are you sure you want to delete this school?")) {
-                              deleteMutation.mutate(school.id);
-                            }
-                          }}
-                          data-testid={`button-delete-${school.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                toggleStatusMutation.mutate({ 
+                                  id: school.id, 
+                                  isActive: !school.isActive 
+                                });
+                              }}
+                              disabled={toggleStatusMutation.isPending}
+                              data-testid={`button-toggle-${school.id}`}
+                            >
+                              {school.isActive ? (
+                                <PowerOff className="w-4 h-4 text-amber-500" />
+                              ) : (
+                                <Power className="w-4 h-4 text-emerald-500" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {school.isActive ? "Deactivate School" : "Activate School"}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedSchool(school);
+                                setDialogOpen(true);
+                              }}
+                              data-testid={`button-edit-${school.id}`}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit School</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (confirm("Are you sure you want to delete this school?")) {
+                                  deleteMutation.mutate(school.id);
+                                }
+                              }}
+                              data-testid={`button-delete-${school.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete School</TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>

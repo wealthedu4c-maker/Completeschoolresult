@@ -15,7 +15,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import type { PIN } from "@shared/schema";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { PIN, School } from "@shared/schema";
 
 export default function Pins() {
   const { toast } = useToast();
@@ -24,6 +31,8 @@ export default function Pins() {
   const [quantity, setQuantity] = useState("10");
   const [session, setSession] = useState("");
   const [term, setTerm] = useState("First");
+  const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [maxUsageCount, setMaxUsageCount] = useState("1");
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const isSuperAdmin = user.role === "super_admin";
@@ -32,12 +41,19 @@ export default function Pins() {
     queryKey: ["/api/pins"],
   });
 
+  const { data: schools } = useQuery<School[]>({
+    queryKey: ["/api/schools"],
+    enabled: isSuperAdmin,
+  });
+
   const generateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/pins", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pins"] });
       setDialogOpen(false);
       setQuantity("10");
+      setMaxUsageCount("1");
+      setSelectedSchoolId("");
       toast({ title: "Success", description: "PINs generated successfully" });
     },
     onError: (error: any) => {
@@ -47,11 +63,19 @@ export default function Pins() {
 
   const handleGenerate = async () => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const schoolId = isSuperAdmin ? selectedSchoolId : user.schoolId;
+    
+    if (!schoolId) {
+      toast({ variant: "destructive", title: "Error", description: "Please select a school" });
+      return;
+    }
+
     await generateMutation.mutateAsync({
-      schoolId: user.schoolId,
+      schoolId,
       quantity: parseInt(quantity),
       session,
       term,
+      maxUsageCount: parseInt(maxUsageCount),
       generatedBy: user.id,
     });
   };
@@ -66,8 +90,13 @@ export default function Pins() {
     pin.session.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const usedPins = pins?.filter(p => p.isUsed).length || 0;
-  const unusedPins = pins?.filter(p => !p.isUsed).length || 0;
+  // Calculate availability based on usage count vs max usage count
+  const exhaustedPins = pins?.filter(p => {
+    const usageCount = (p as any).usageCount || 0;
+    const maxUsage = (p as any).maxUsageCount || 1;
+    return usageCount >= maxUsage;
+  }).length || 0;
+  const availablePins = (pins?.length || 0) - exhaustedPins;
 
   return (
     <div className="p-6 space-y-6">
@@ -104,27 +133,27 @@ export default function Pins() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unused PINs</CardTitle>
+            <CardTitle className="text-sm font-medium">Available PINs</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="stat-unused-pins">
-              {unusedPins}
+            <div className="text-2xl font-bold text-green-600 dark:text-green-500" data-testid="stat-available-pins">
+              {availablePins}
             </div>
-            <p className="text-xs text-muted-foreground">Available for use</p>
+            <p className="text-xs text-muted-foreground">Still has remaining uses</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Used PINs</CardTitle>
+            <CardTitle className="text-sm font-medium">Exhausted PINs</CardTitle>
             <XCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-muted-foreground" data-testid="stat-used-pins">
-              {usedPins}
+            <div className="text-2xl font-bold text-muted-foreground" data-testid="stat-exhausted-pins">
+              {exhaustedPins}
             </div>
-            <p className="text-xs text-muted-foreground">Already checked</p>
+            <p className="text-xs text-muted-foreground">No remaining uses</p>
           </CardContent>
         </Card>
       </div>
@@ -147,33 +176,40 @@ export default function Pins() {
               Loading PINs...
             </div>
           ) : filteredPins && filteredPins.length > 0 ? (
-            filteredPins.map((pin) => (
-              <Card key={pin.id} className="p-4" data-testid={`card-pin-${pin.id}`}>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Badge variant={pin.isUsed ? "secondary" : "default"}>
-                      {pin.isUsed ? "Used" : "Available"}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(pin.pin)}
-                      data-testid={`button-copy-${pin.id}`}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
+            filteredPins.map((pin) => {
+              const usageCount = (pin as any).usageCount || 0;
+              const maxUsage = (pin as any).maxUsageCount || 1;
+              const isExhausted = usageCount >= maxUsage;
+              
+              return (
+                <Card key={pin.id} className="p-4" data-testid={`card-pin-${pin.id}`}>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant={isExhausted ? "secondary" : "default"}>
+                        {isExhausted ? "Exhausted" : "Available"}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(pin.pin)}
+                        data-testid={`button-copy-${pin.id}`}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <div className="font-mono text-lg font-bold text-center py-2 bg-muted rounded">
+                      {pin.pin}
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <div>Session: {pin.session}</div>
+                      <div>Term: {pin.term}</div>
+                      <div>Usage: {usageCount} / {maxUsage}</div>
+                      <div>Expires: {new Date(pin.expiryDate).toLocaleDateString()}</div>
+                    </div>
                   </div>
-                  <div className="font-mono text-lg font-bold text-center py-2 bg-muted rounded">
-                    {pin.pin}
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <div>Session: {pin.session}</div>
-                    <div>Term: {pin.term}</div>
-                    <div>Expires: {new Date(pin.expiryDate).toLocaleDateString()}</div>
-                  </div>
-                </div>
-              </Card>
-            ))
+                </Card>
+              );
+            })
           ) : (
             <div className="col-span-full text-center py-8 text-muted-foreground">
               No PINs found
@@ -191,6 +227,24 @@ export default function Pins() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <Label htmlFor="school">School</Label>
+                <Select value={selectedSchoolId} onValueChange={setSelectedSchoolId}>
+                  <SelectTrigger data-testid="select-school">
+                    <SelectValue placeholder="Select a school" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schools?.filter(s => s.isActive).map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        {school.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="quantity">Quantity</Label>
               <Input
@@ -226,9 +280,25 @@ export default function Pins() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="maxUsageCount">Max Usage Count</Label>
+              <Input
+                id="maxUsageCount"
+                type="number"
+                min="1"
+                max="100"
+                value={maxUsageCount}
+                onChange={(e) => setMaxUsageCount(e.target.value)}
+                data-testid="input-max-usage"
+              />
+              <p className="text-xs text-muted-foreground">
+                How many times each PIN can be used (default: 1 for single-use)
+              </p>
+            </div>
+
             <Button
               onClick={handleGenerate}
-              disabled={generateMutation.isPending}
+              disabled={generateMutation.isPending || (isSuperAdmin && !selectedSchoolId)}
               className="w-full"
               data-testid="button-submit"
             >

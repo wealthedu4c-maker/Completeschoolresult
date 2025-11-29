@@ -53,8 +53,10 @@ export default function PinRequests() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [maxUsageCount, setMaxUsageCount] = useState("1");
   const [formData, setFormData] = useState({
     quantity: 10,
     session: new Date().getFullYear() + "/" + (new Date().getFullYear() + 1),
@@ -86,12 +88,16 @@ export default function PinRequests() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("POST", `/api/pin-requests/${id}/approve`);
+    mutationFn: async ({ id, maxUsageCount }: { id: string; maxUsageCount: number }) => {
+      const res = await apiRequest("POST", `/api/pin-requests/${id}/approve`, { maxUsageCount });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pin-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pins"] });
+      setApproveDialogOpen(false);
+      setSelectedRequestId(null);
+      setMaxUsageCount("1");
       toast({
         title: "Success",
         description: "PIN request approved and PINs generated",
@@ -101,6 +107,21 @@ export default function PinRequests() {
       toast({ variant: "destructive", title: "Error", description: error.message });
     },
   });
+
+  const openApproveDialog = (requestId: string) => {
+    setSelectedRequestId(requestId);
+    setMaxUsageCount("1");
+    setApproveDialogOpen(true);
+  };
+
+  const handleApprove = () => {
+    if (selectedRequestId) {
+      approveMutation.mutate({ 
+        id: selectedRequestId, 
+        maxUsageCount: parseInt(maxUsageCount) || 1 
+      });
+    }
+  };
 
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
@@ -292,7 +313,7 @@ export default function PinRequests() {
                                 size="icon"
                                 variant="ghost"
                                 className="text-green-600 hover:text-green-700 hover:bg-green-100"
-                                onClick={() => approveMutation.mutate(request.id)}
+                                onClick={() => openApproveDialog(request.id)}
                                 disabled={approveMutation.isPending}
                                 data-testid={`button-approve-${request.id}`}
                               >
@@ -359,6 +380,52 @@ export default function PinRequests() {
             >
               {rejectMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Reject Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Dialog with Usage Limit */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>Approve PIN Request</DialogTitle>
+            <DialogDescription>
+              Set the usage limit for the generated PINs
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="maxUsage">Max Usage Count per PIN</Label>
+              <Input
+                id="maxUsage"
+                type="number"
+                min={1}
+                max={100}
+                value={maxUsageCount}
+                onChange={(e) => setMaxUsageCount(e.target.value)}
+                data-testid="input-max-usage-count"
+              />
+              <p className="text-xs text-muted-foreground">
+                How many times each PIN can be used to check results (default: 1 for single-use)
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setApproveDialogOpen(false)}
+              data-testid="button-cancel-approval"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApprove}
+              disabled={approveMutation.isPending}
+              data-testid="button-confirm-approval"
+            >
+              {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Approve & Generate PINs
             </Button>
           </DialogFooter>
         </DialogContent>
