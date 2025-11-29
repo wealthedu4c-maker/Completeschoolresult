@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Copy, CheckCircle, XCircle, Key, Search } from "lucide-react";
+import { Plus, Copy, CheckCircle, XCircle, Key, Search, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import type { PIN, School } from "@shared/schema";
 
 export default function Pins() {
@@ -85,6 +95,93 @@ export default function Pins() {
     toast({ title: "Copied!", description: "PIN copied to clipboard" });
   };
 
+  const downloadCSV = (pinsToDownload: PIN[], filename: string = "pins") => {
+    const headers = ["PIN", "Session", "Term", "Status", "Usage", "Max Usage", "Expiry Date"];
+    const rows = pinsToDownload.map((pin) => {
+      const usageCount = (pin as any).usageCount || 0;
+      const maxUsage = (pin as any).maxUsageCount || 1;
+      const isExhausted = usageCount >= maxUsage;
+      return [
+        pin.pin,
+        pin.session,
+        pin.term,
+        isExhausted ? "Exhausted" : "Available",
+        usageCount.toString(),
+        maxUsage.toString(),
+        new Date(pin.expiryDate).toLocaleDateString(),
+      ];
+    });
+
+    const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Downloaded", description: `${pinsToDownload.length} PIN(s) exported as CSV` });
+  };
+
+  const downloadPDF = (pinsToDownload: PIN[], filename: string = "pins") => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text("Result Checker PINs", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 28);
+    doc.text(`Total PINs: ${pinsToDownload.length}`, 14, 34);
+
+    const tableData = pinsToDownload.map((pin) => {
+      const usageCount = (pin as any).usageCount || 0;
+      const maxUsage = (pin as any).maxUsageCount || 1;
+      const isExhausted = usageCount >= maxUsage;
+      return [
+        pin.pin,
+        pin.session,
+        pin.term,
+        isExhausted ? "Exhausted" : "Available",
+        `${usageCount}/${maxUsage}`,
+        new Date(pin.expiryDate).toLocaleDateString(),
+      ];
+    });
+
+    autoTable(doc, {
+      head: [["PIN", "Session", "Term", "Status", "Usage", "Expiry"]],
+      body: tableData,
+      startY: 40,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+
+    doc.save(`${filename}.pdf`);
+    toast({ title: "Downloaded", description: `${pinsToDownload.length} PIN(s) exported as PDF` });
+  };
+
+  const downloadSinglePIN = (pin: PIN, format: "pdf" | "csv") => {
+    if (format === "csv") {
+      downloadCSV([pin], `pin-${pin.pin}`);
+    } else {
+      downloadPDF([pin], `pin-${pin.pin}`);
+    }
+  };
+
+  const downloadAllPINs = (format: "pdf" | "csv") => {
+    const pinsToDownload = filteredPins || pins || [];
+    if (pinsToDownload.length === 0) {
+      toast({ variant: "destructive", title: "No PINs", description: "No PINs available to download" });
+      return;
+    }
+    if (format === "csv") {
+      downloadCSV(pinsToDownload, `all-pins-${new Date().toISOString().split("T")[0]}`);
+    } else {
+      downloadPDF(pinsToDownload, `all-pins-${new Date().toISOString().split("T")[0]}`);
+    }
+  };
+
   const filteredPins = pins?.filter((pin) =>
     pin.pin.toLowerCase().includes(searchQuery.toLowerCase()) ||
     pin.session.toLowerCase().includes(searchQuery.toLowerCase())
@@ -109,12 +206,34 @@ export default function Pins() {
               : "View your school's result PINs (request new PINs from the PIN Requests page)"}
           </p>
         </div>
-        {isSuperAdmin && (
-          <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-generate-pins">
-            <Plus className="w-4 h-4 mr-2" />
-            Generate PINs
-          </Button>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full sm:w-auto" data-testid="button-download-pins">
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => downloadAllPINs("pdf")} data-testid="button-download-pdf">
+                <FileText className="w-4 h-4 mr-2" />
+                Download as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => downloadAllPINs("csv")} data-testid="button-download-csv">
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Download as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {isSuperAdmin && (
+            <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-generate-pins">
+              <Plus className="w-4 h-4 mr-2" />
+              Generate PINs
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-3">
@@ -188,14 +307,31 @@ export default function Pins() {
                       <Badge variant={isExhausted ? "secondary" : "default"}>
                         {isExhausted ? "Exhausted" : "Available"}
                       </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(pin.pin)}
-                        data-testid={`button-copy-${pin.id}`}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" data-testid={`button-download-single-${pin.id}`}>
+                              <Download className="w-3 h-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => downloadSinglePIN(pin, "pdf")}>
+                              <FileText className="w-3 h-3 mr-2" /> PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => downloadSinglePIN(pin, "csv")}>
+                              <FileSpreadsheet className="w-3 h-3 mr-2" /> CSV
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(pin.pin)}
+                          data-testid={`button-copy-${pin.id}`}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="font-mono text-lg font-bold text-center py-2 bg-muted rounded">
                       {pin.pin}
