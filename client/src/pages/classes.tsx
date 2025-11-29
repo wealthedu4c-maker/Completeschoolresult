@@ -296,7 +296,7 @@ export default function Classes() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto flex flex-col">
           <DialogHeader>
             <DialogTitle>
               {editingClass 
@@ -494,13 +494,13 @@ export default function Classes() {
               </Button>
             </form>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-col flex-1 min-h-0 gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-shrink-0 flex-wrap">
                 <Badge variant="outline">{formData.name}</Badge>
                 <span>- Select subjects to assign</span>
               </div>
               
-              <ScrollArea className="h-[300px] pr-4 border rounded-lg">
+              <ScrollArea className="flex-1 max-h-[40vh] pr-4 border rounded-lg">
                 <div className="p-3 space-y-2">
                   {subjects.length === 0 ? (
                     <p className="text-muted-foreground text-center py-4">
@@ -521,11 +521,11 @@ export default function Classes() {
                         <Checkbox
                           checked={selectedSubjects.includes(subject.id)}
                           onCheckedChange={() => {}}
-                          className="pointer-events-none"
+                          className="pointer-events-none flex-shrink-0"
                         />
-                        <div className="flex-1">
-                          <p className="font-medium">{subject.name}</p>
-                          <p className="text-sm text-muted-foreground">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{subject.name}</p>
+                          <p className="text-sm text-muted-foreground truncate">
                             {subject.code} - {subject.category}
                           </p>
                         </div>
@@ -535,15 +535,15 @@ export default function Classes() {
                 </div>
               </ScrollArea>
 
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground flex-shrink-0">
                 {selectedSubjects.length} subject(s) selected
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col-reverse sm:flex-row gap-2 flex-shrink-0">
                 <Button
                   variant="outline"
                   onClick={() => setCreateStep(1)}
-                  className="gap-2"
+                  className="gap-2 w-full sm:w-auto"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   Back
@@ -620,8 +620,8 @@ export default function Classes() {
               <div className="text-sm text-muted-foreground py-2">
                 {selectedSubjects.length} subject(s) selected
               </div>
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <Button variant="outline" onClick={closeSubjectDialog}>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t flex-shrink-0">
+                <Button variant="outline" onClick={closeSubjectDialog} className="w-full sm:w-auto">
                   Cancel
                 </Button>
                 <Button
@@ -634,6 +634,7 @@ export default function Classes() {
                     }
                   }}
                   disabled={updateSubjectsMutation.isPending}
+                  className="w-full sm:w-auto"
                   data-testid="button-save-subjects"
                 >
                   {updateSubjectsMutation.isPending ? (

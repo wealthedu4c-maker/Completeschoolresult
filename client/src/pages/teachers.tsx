@@ -29,7 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Search, UserCheck, UserX, Loader2, Mail, Phone, BookOpen, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -413,8 +412,8 @@ export default function Teachers() {
       </Card>
 
       <Dialog open={isAssignDialogOpen} onOpenChange={(open) => !open && closeAssignDialog()}>
-        <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
               Assign Classes & Subjects
@@ -430,70 +429,69 @@ export default function Teachers() {
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : (
-            <>
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground">
-                  Click on a class-subject combination to assign or remove. 
-                  Selected: <span className="font-semibold">{assignments.length}</span> assignments
-                </div>
-                
-                <ScrollArea className="h-[400px] pr-4 border rounded-lg">
-                  <div className="p-4 space-y-4">
-                    {classes.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-4">
-                        No classes available. Please add classes first.
-                      </p>
-                    ) : subjects.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-4">
-                        No subjects available. Please add subjects first.
-                      </p>
-                    ) : (
-                      classes.map((classRecord) => (
-                        <div key={classRecord.id} className="space-y-2">
-                          <div className="font-medium text-sm bg-muted/50 px-3 py-2 rounded-md flex items-center gap-2">
-                            <BookOpen className="w-4 h-4" />
-                            {classRecord.name}
-                            {classRecord.arm && ` (${classRecord.arm})`}
-                            <span className="text-xs text-muted-foreground">- {classRecord.academicYear}</span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4">
-                            {subjects.map((subject) => {
-                              const assigned = isAssigned(classRecord.id, subject.id);
-                              return (
-                                <div
-                                  key={`${classRecord.id}-${subject.id}`}
-                                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors
-                                    ${assigned 
-                                      ? "bg-primary/10 border-primary text-primary" 
-                                      : "hover-elevate"
-                                    }`}
-                                  onClick={() => toggleAssignment(classRecord.id, subject.id)}
-                                  data-testid={`assignment-${classRecord.id}-${subject.id}`}
-                                >
-                                  <Checkbox
-                                    checked={assigned}
-                                    onCheckedChange={() => {}}
-                                    className="pointer-events-none"
-                                  />
-                                  <span className="text-sm truncate">{subject.name}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
+            <div className="flex flex-col flex-1 min-h-0 gap-4 overflow-hidden">
+              <div className="text-sm text-muted-foreground flex-shrink-0">
+                Click on a class-subject combination to assign or remove. 
+                Selected: <span className="font-semibold">{assignments.length}</span> assignments
               </div>
               
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" onClick={closeAssignDialog}>
+              <div className="flex-1 min-h-0 overflow-y-auto pr-2 border rounded-lg">
+                <div className="p-4 space-y-4">
+                  {classes.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">
+                      No classes available. Please add classes first.
+                    </p>
+                  ) : subjects.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">
+                      No subjects available. Please add subjects first.
+                    </p>
+                  ) : (
+                    classes.map((classRecord) => (
+                      <div key={classRecord.id} className="space-y-2">
+                        <div className="font-medium text-sm bg-muted/50 px-3 py-2 rounded-md flex items-center gap-2 flex-wrap">
+                          <BookOpen className="w-4 h-4 flex-shrink-0" />
+                          <span>{classRecord.name}</span>
+                          {classRecord.arm && <span>({classRecord.arm})</span>}
+                          <span className="text-xs text-muted-foreground">- {classRecord.academicYear}</span>
+                        </div>
+                        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-2 pl-2 sm:pl-4">
+                          {subjects.map((subject) => {
+                            const assigned = isAssigned(classRecord.id, subject.id);
+                            return (
+                              <div
+                                key={`${classRecord.id}-${subject.id}`}
+                                className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors
+                                  ${assigned 
+                                    ? "bg-primary/10 border-primary text-primary" 
+                                    : "hover-elevate"
+                                  }`}
+                                onClick={() => toggleAssignment(classRecord.id, subject.id)}
+                                data-testid={`assignment-${classRecord.id}-${subject.id}`}
+                              >
+                                <Checkbox
+                                  checked={assigned}
+                                  onCheckedChange={() => {}}
+                                  className="pointer-events-none flex-shrink-0"
+                                />
+                                <span className="text-sm truncate">{subject.name}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t flex-shrink-0">
+                <Button variant="outline" onClick={closeAssignDialog} className="w-full sm:w-auto">
                   Cancel
                 </Button>
                 <Button
                   onClick={handleAssignSubmit}
                   disabled={assignmentsMutation.isPending}
+                  className="w-full sm:w-auto"
                   data-testid="button-save-assignments"
                 >
                   {assignmentsMutation.isPending ? (
@@ -502,7 +500,7 @@ export default function Teachers() {
                   Save Assignments
                 </Button>
               </div>
-            </>
+            </div>
           )}
         </DialogContent>
       </Dialog>
