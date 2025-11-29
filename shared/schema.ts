@@ -82,11 +82,11 @@ export const students = pgTable("students", {
   lastName: varchar("last_name", { length: 100 }).notNull(),
   otherNames: varchar("other_names", { length: 100 }),
   gender: varchar("gender", { length: 10 }).notNull(), // 'Male', 'Female'
-  dateOfBirth: timestamp("date_of_birth").notNull(),
+  dateOfBirth: timestamp("date_of_birth"), // Optional
   class: varchar("class", { length: 50 }).notNull(),
   classArm: varchar("class_arm", { length: 5 }),
-  parentName: varchar("parent_name", { length: 200 }).notNull(),
-  parentPhone: varchar("parent_phone", { length: 20 }).notNull(),
+  parentName: varchar("parent_name", { length: 200 }), // Optional
+  parentPhone: varchar("parent_phone", { length: 20 }), // Optional
   parentEmail: varchar("parent_email", { length: 255 }),
   address: text("address"),
   isActive: boolean("is_active").default(true).notNull(),
@@ -337,7 +337,6 @@ export const insertStudentSchema = createInsertSchema(students, {
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   gender: z.enum(["Male", "Female"]),
-  parentPhone: z.string().min(1),
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
 export const insertResultSchema = createInsertSchema(results, {
