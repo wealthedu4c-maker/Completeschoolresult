@@ -5,8 +5,30 @@ import { authenticate, authorize, JWT_SECRET, type AuthRequest } from "./middlew
 import { calculateResults, generatePIN } from "./utils/result-calculator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema } from "@shared/schema";
+import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema, insertResultSheetSchema, insertResultSheetEntrySchema } from "@shared/schema";
 import { z } from "zod";
+
+// Helper functions for grade calculation
+function calculateGrade(total: number): string {
+  if (total >= 70) return "A";
+  if (total >= 60) return "B";
+  if (total >= 50) return "C";
+  if (total >= 40) return "D";
+  if (total >= 30) return "E";
+  return "F";
+}
+
+function getGradeRemark(grade: string): string {
+  const remarks: Record<string, string> = {
+    "A": "Excellent",
+    "B": "Very Good",
+    "C": "Good",
+    "D": "Fair",
+    "E": "Pass",
+    "F": "Fail",
+  };
+  return remarks[grade] || "N/A";
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ===== AUTHENTICATION ROUTES =====
@@ -517,6 +539,426 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== RESULT SHEETS ROUTES =====
+  // List result sheets (teachers see their own, admins see all for their school)
+  app.get("/api/result-sheets", authenticate, async (req: AuthRequest, res) => {
+    try {
+      if (!req.user!.schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const filters = {
+        status: req.query.status as string,
+        classId: req.query.classId as string,
+        subjectId: req.query.subjectId as string,
+        session: req.query.session as string,
+        term: req.query.term as string,
+      };
+
+      let sheets = await storage.listResultSheets(req.user!.schoolId, filters);
+
+      // Teachers only see sheets they submitted
+      if (req.user!.role === "teacher") {
+        sheets = sheets.filter(s => s.submittedBy === req.user!.id);
+      }
+
+      res.json(sheets);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get a single result sheet with its entries
+  app.get("/api/result-sheets/:id", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      // Verify sheet belongs to user's school
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot access result sheets from other schools" });
+      }
+
+      // Get entries for the sheet
+      const entries = await storage.listResultSheetEntries(sheet.id);
+
+      res.json({ sheet, entries });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create a new result sheet (teacher only)
+  app.post("/api/result-sheets", authenticate, authorize("teacher"), async (req: AuthRequest, res) => {
+    try {
+      const { classId, subjectId, session, term, entries } = req.body;
+
+      if (!classId || !subjectId || !session || !term) {
+        return res.status(400).json({ message: "Class, subject, session, and term are required" });
+      }
+
+      // Verify class and subject exist and belong to user's school
+      const classRecord = await storage.getClass(classId);
+      if (!classRecord || classRecord.schoolId !== req.user!.schoolId) {
+        return res.status(400).json({ message: "Invalid class" });
+      }
+
+      const subject = await storage.getSubject(subjectId);
+      if (!subject || subject.schoolId !== req.user!.schoolId) {
+        return res.status(400).json({ message: "Invalid subject" });
+      }
+
+      // Check teacher assignment (teacher must be assigned to this class+subject)
+      const assignments = await storage.getTeacherAssignments(req.user!.id);
+      const isAssigned = assignments.some(a => a.classId === classId && a.subjectId === subjectId);
+      if (!isAssigned) {
+        return res.status(403).json({ message: "You are not assigned to teach this subject for this class" });
+      }
+
+      // Check if a sheet already exists for this class/subject/session/term
+      const existingSheets = await storage.listResultSheets(req.user!.schoolId!, {
+        classId,
+        subjectId,
+        session,
+        term,
+      });
+
+      // Allow editing existing draft sheets
+      const existingDraft = existingSheets.find(s => s.submittedBy === req.user!.id && s.status === "draft");
+      if (existingDraft) {
+        // Update existing draft instead of creating new
+        await storage.deleteResultSheetEntriesBySheet(existingDraft.id);
+        
+        // Create new entries
+        if (entries && entries.length > 0) {
+          const entriesToCreate = entries.map((e: any) => {
+            const ca1 = parseFloat(e.ca1) || 0;
+            const ca2 = parseFloat(e.ca2) || 0;
+            const exam = parseFloat(e.exam) || 0;
+            const total = ca1 + ca2 + exam;
+            const grade = calculateGrade(total);
+            const remark = getGradeRemark(grade);
+
+            return {
+              sheetId: existingDraft.id,
+              studentId: e.studentId,
+              ca1: String(ca1),
+              ca2: String(ca2),
+              exam: String(exam),
+              total: String(total),
+              grade,
+              remark,
+            };
+          });
+
+          await storage.createResultSheetEntries(entriesToCreate);
+        }
+
+        const updatedEntries = await storage.listResultSheetEntries(existingDraft.id);
+        return res.json({ sheet: existingDraft, entries: updatedEntries });
+      }
+
+      // Check if there's a non-draft sheet (submitted/approved/published)
+      const activeSheet = existingSheets.find(s => s.status !== "draft" && s.status !== "rejected");
+      if (activeSheet) {
+        return res.status(400).json({ 
+          message: `A result sheet for this class/subject already exists with status: ${activeSheet.status}` 
+        });
+      }
+
+      // Create new sheet
+      const sheet = await storage.createResultSheet({
+        schoolId: req.user!.schoolId!,
+        classId,
+        subjectId,
+        session,
+        term,
+        status: "draft",
+        submittedBy: req.user!.id,
+      });
+
+      // Create entries
+      if (entries && entries.length > 0) {
+        const entriesToCreate = entries.map((e: any) => {
+          const ca1 = parseFloat(e.ca1) || 0;
+          const ca2 = parseFloat(e.ca2) || 0;
+          const exam = parseFloat(e.exam) || 0;
+          const total = ca1 + ca2 + exam;
+          const grade = calculateGrade(total);
+          const remark = getGradeRemark(grade);
+
+          return {
+            sheetId: sheet.id,
+            studentId: e.studentId,
+            ca1: String(ca1),
+            ca2: String(ca2),
+            exam: String(exam),
+            total: String(total),
+            grade,
+            remark,
+          };
+        });
+
+        await storage.createResultSheetEntries(entriesToCreate);
+      }
+
+      const createdEntries = await storage.listResultSheetEntries(sheet.id);
+      res.status(201).json({ sheet, entries: createdEntries });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Update result sheet entries (draft only)
+  app.put("/api/result-sheets/:id/entries", authenticate, authorize("teacher"), async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      // Verify sheet belongs to user's school and user submitted it
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update result sheets from other schools" });
+      }
+
+      if (sheet.submittedBy !== req.user!.id) {
+        return res.status(403).json({ message: "Can only update your own result sheets" });
+      }
+
+      if (sheet.status !== "draft" && sheet.status !== "rejected") {
+        return res.status(400).json({ message: "Can only update draft or rejected result sheets" });
+      }
+
+      const { entries } = req.body;
+
+      // Clear existing entries and create new ones
+      await storage.deleteResultSheetEntriesBySheet(sheet.id);
+
+      if (entries && entries.length > 0) {
+        const entriesToCreate = entries.map((e: any) => {
+          const ca1 = parseFloat(e.ca1) || 0;
+          const ca2 = parseFloat(e.ca2) || 0;
+          const exam = parseFloat(e.exam) || 0;
+          const total = ca1 + ca2 + exam;
+          const grade = calculateGrade(total);
+          const remark = getGradeRemark(grade);
+
+          return {
+            sheetId: sheet.id,
+            studentId: e.studentId,
+            ca1: String(ca1),
+            ca2: String(ca2),
+            exam: String(exam),
+            total: String(total),
+            grade,
+            remark,
+          };
+        });
+
+        await storage.createResultSheetEntries(entriesToCreate);
+      }
+
+      // Reset to draft if it was rejected
+      if (sheet.status === "rejected") {
+        await storage.updateResultSheet(sheet.id, { status: "draft" } as any);
+      }
+
+      const updatedEntries = await storage.listResultSheetEntries(sheet.id);
+      res.json({ sheet, entries: updatedEntries });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Submit result sheet for approval
+  app.patch("/api/result-sheets/:id/submit", authenticate, authorize("teacher"), async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot submit result sheets from other schools" });
+      }
+
+      if (sheet.submittedBy !== req.user!.id) {
+        return res.status(403).json({ message: "Can only submit your own result sheets" });
+      }
+
+      if (sheet.status !== "draft" && sheet.status !== "rejected") {
+        return res.status(400).json({ message: "Can only submit draft or rejected result sheets" });
+      }
+
+      // Verify sheet has entries
+      const entries = await storage.listResultSheetEntries(sheet.id);
+      if (entries.length === 0) {
+        return res.status(400).json({ message: "Cannot submit empty result sheet" });
+      }
+
+      const updatedSheet = await storage.submitResultSheet(sheet.id, req.user!.id);
+
+      // Notify school admins
+      const school = await storage.getSchool(req.user!.schoolId!);
+      const allUsers = await storage.listUsers(req.user!.schoolId!);
+      const schoolAdmins = allUsers.filter(u => u.role === "school_admin");
+      
+      const classRecord = await storage.getClass(sheet.classId);
+      const subject = await storage.getSubject(sheet.subjectId);
+
+      for (const admin of schoolAdmins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "result_sheet_submitted",
+          title: "New Result Sheet Submitted",
+          message: `A result sheet for ${classRecord?.name || "Unknown Class"} - ${subject?.name || "Unknown Subject"} has been submitted for review`,
+          data: { sheetId: sheet.id },
+        });
+      }
+
+      res.json(updatedSheet);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Approve result sheet (school admin)
+  app.patch("/api/result-sheets/:id/approve", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot approve result sheets from other schools" });
+      }
+
+      if (sheet.status !== "submitted") {
+        return res.status(400).json({ message: "Can only approve submitted result sheets" });
+      }
+
+      // Check if school has a logo
+      const school = await storage.getSchool(req.user!.schoolId!);
+      if (!school?.logo) {
+        return res.status(400).json({ 
+          message: "Please upload your school logo in Profile Settings before approving results" 
+        });
+      }
+
+      const updatedSheet = await storage.approveResultSheet(sheet.id, req.user!.id);
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "approve_result_sheet",
+        resource: "result_sheet",
+        resourceId: sheet.id,
+        details: { classId: sheet.classId, subjectId: sheet.subjectId, session: sheet.session, term: sheet.term },
+      });
+
+      // Aggregate results when sheet is approved
+      await storage.aggregateStudentResults(sheet.schoolId, sheet.session, sheet.term);
+
+      // Notify the teacher
+      await storage.createNotification({
+        userId: sheet.submittedBy,
+        type: "result_sheet_approved",
+        title: "Result Sheet Approved",
+        message: `Your result sheet has been approved`,
+        data: { sheetId: sheet.id },
+      });
+
+      res.json(updatedSheet);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Reject result sheet (school admin)
+  app.patch("/api/result-sheets/:id/reject", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot reject result sheets from other schools" });
+      }
+
+      if (sheet.status !== "submitted") {
+        return res.status(400).json({ message: "Can only reject submitted result sheets" });
+      }
+
+      const { reason } = req.body;
+      if (!reason) {
+        return res.status(400).json({ message: "Rejection reason is required" });
+      }
+
+      const updatedSheet = await storage.rejectResultSheet(sheet.id, req.user!.id, reason);
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "reject_result_sheet",
+        resource: "result_sheet",
+        resourceId: sheet.id,
+        details: { classId: sheet.classId, subjectId: sheet.subjectId, reason },
+      });
+
+      // Notify the teacher
+      await storage.createNotification({
+        userId: sheet.submittedBy,
+        type: "result_sheet_rejected",
+        title: "Result Sheet Rejected",
+        message: `Your result sheet has been rejected. Reason: ${reason}`,
+        data: { sheetId: sheet.id, reason },
+      });
+
+      res.json(updatedSheet);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Delete result sheet (teacher can delete own drafts)
+  app.delete("/api/result-sheets/:id", authenticate, authorize("teacher", "school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const sheet = await storage.getResultSheet(req.params.id);
+      if (!sheet) {
+        return res.status(404).json({ message: "Result sheet not found" });
+      }
+
+      if (sheet.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot delete result sheets from other schools" });
+      }
+
+      // Teachers can only delete their own drafts
+      if (req.user!.role === "teacher") {
+        if (sheet.submittedBy !== req.user!.id) {
+          return res.status(403).json({ message: "Can only delete your own result sheets" });
+        }
+        if (sheet.status !== "draft") {
+          return res.status(400).json({ message: "Can only delete draft result sheets" });
+        }
+      }
+
+      // School admins cannot delete published sheets
+      if (sheet.status === "published") {
+        return res.status(400).json({ message: "Cannot delete published result sheets" });
+      }
+
+      await storage.deleteResultSheet(sheet.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
