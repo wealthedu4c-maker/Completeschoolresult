@@ -108,29 +108,29 @@ export default function Schools() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Schools</h2>
-          <p className="text-muted-foreground">Manage all schools in the system</p>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Schools</h2>
+          <p className="text-sm md:text-base text-muted-foreground">Manage all schools in the system</p>
         </div>
         <Button onClick={() => {
           setSelectedSchool(null);
           setDialogOpen(true);
-        }} data-testid="button-add-school">
+        }} className="w-full sm:w-auto" data-testid="button-add-school">
           <Plus className="w-4 h-4 mr-2" />
           Add School
         </Button>
       </div>
 
-      <Card className="p-4">
+      <Card className="p-3 md:p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Search className="w-4 h-4 text-muted-foreground" />
+          <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <Input
             placeholder="Search schools..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-sm"
+            className="w-full sm:max-w-sm"
             data-testid="input-search"
           />
         </div>
