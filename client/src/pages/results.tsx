@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Eye, Send, CheckCircle, XCircle, Upload, Globe, FileEdit } from "lucide-react";
+import { Plus, Search, Eye, Send, CheckCircle, XCircle, Upload, Globe, FileEdit, Table2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +17,7 @@ import type { Result } from "@shared/schema";
 import { BulkResultUploadDialog } from "@/components/results/BulkResultUploadDialog";
 import { UploadResultDialog } from "@/components/results/UploadResultDialog";
 import { ResultDetailsDialog } from "@/components/results/ResultDetailsDialog";
+import { SpreadsheetResultUpload } from "@/components/results/SpreadsheetResultUpload";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
@@ -45,6 +46,7 @@ export default function Results() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [spreadsheetUploadOpen, setSpreadsheetUploadOpen] = useState(false);
   const [selectedResult, setSelectedResult] = useState<Result | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -173,14 +175,17 @@ export default function Results() {
             data-testid="button-bulk-upload"
           >
             <Upload className="w-4 h-4" />
-            Bulk Upload
+            <span className="hidden sm:inline">Bulk Upload</span>
+            <span className="sm:hidden">Bulk</span>
           </Button>
           <Button 
-            onClick={() => setUploadDialogOpen(true)}
+            onClick={() => setSpreadsheetUploadOpen(true)}
+            className="gap-2"
             data-testid="button-upload-result"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Upload Result
+            <Table2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Upload Results</span>
+            <span className="sm:hidden">Upload</span>
           </Button>
         </div>
       </div>
@@ -376,6 +381,7 @@ export default function Results() {
 
       <BulkResultUploadDialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen} />
       <UploadResultDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
+      <SpreadsheetResultUpload open={spreadsheetUploadOpen} onOpenChange={setSpreadsheetUploadOpen} />
       <ResultDetailsDialog 
         open={detailsDialogOpen} 
         onOpenChange={setDetailsDialogOpen} 

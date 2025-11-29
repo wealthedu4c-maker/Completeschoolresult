@@ -183,38 +183,38 @@ export default function Profile() {
   const currentLogo = logoPreview || school?.logo;
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Profile Settings</h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Profile Settings</h2>
+        <p className="text-sm md:text-base text-muted-foreground">
           Manage your account settings and preferences
         </p>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 md:gap-6">
         {/* User Information Card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="w-5 h-5" />
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <User className="w-4 h-4 md:w-5 md:h-5" />
               Account Information
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs md:text-sm">
               Your personal account details
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Avatar className="w-16 h-16">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xl font-semibold">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <Avatar className="w-16 h-16 md:w-20 md:h-20">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xl md:text-2xl font-semibold">
                   {user.firstName?.[0]}{user.lastName?.[0]}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <h3 className="text-lg font-semibold" data-testid="text-user-name">
+              <div className="text-center sm:text-left">
+                <h3 className="text-base md:text-lg font-semibold" data-testid="text-user-name">
                   {user.firstName} {user.lastName}
                 </h3>
-                <p className="text-sm text-muted-foreground" data-testid="text-user-email">
+                <p className="text-xs md:text-sm text-muted-foreground break-all" data-testid="text-user-email">
                   {user.email}
                 </p>
                 <Badge className="mt-1" data-testid="badge-user-role">
@@ -228,23 +228,23 @@ export default function Profile() {
         {/* School Logo Card - Only for School Admin */}
         {user.role === "school_admin" && user.schoolId && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <Building2 className="w-4 h-4 md:w-5 md:h-5" />
                 School Logo
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs md:text-sm">
                 Upload your school logo to display on result sheets
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-6">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+                <div className="relative flex-shrink-0">
                   {currentLogo ? (
                     <div className="relative">
-                      <Avatar className="w-24 h-24">
+                      <Avatar className="w-20 h-20 md:w-24 md:h-24">
                         <AvatarImage src={currentLogo} alt="School logo" />
-                        <AvatarFallback className="text-2xl font-bold bg-primary text-primary-foreground">
+                        <AvatarFallback className="text-xl md:text-2xl font-bold bg-primary text-primary-foreground">
                           {school?.name?.slice(0, 2).toUpperCase() || "SC"}
                         </AvatarFallback>
                       </Avatar>
@@ -262,13 +262,13 @@ export default function Profile() {
                     </div>
                   ) : (
                     <div
-                      className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors"
+                      className="w-20 h-20 md:w-24 md:h-24 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors"
                       onClick={() => fileInputRef.current?.click()}
                     >
                       {logoLoading ? (
-                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                        <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin text-muted-foreground" />
                       ) : (
-                        <Upload className="w-8 h-8 text-muted-foreground" />
+                        <Upload className="w-6 h-6 md:w-8 md:h-8 text-muted-foreground" />
                       )}
                     </div>
                   )}
@@ -283,12 +283,13 @@ export default function Profile() {
                   data-testid="input-logo"
                 />
                 
-                <div className="space-y-2">
+                <div className="space-y-2 text-center sm:text-left">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={logoLoading}
+                    className="w-full sm:w-auto"
                     data-testid="button-upload-logo"
                   >
                     {logoLoading ? (
@@ -319,19 +320,19 @@ export default function Profile() {
 
         {/* Change Password Card */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="w-5 h-5" />
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+              <Lock className="w-4 h-4 md:w-5 md:h-5" />
               Change Password
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs md:text-sm">
               Update your account password
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handlePasswordChange} className="space-y-4 max-w-md">
               <div className="space-y-2">
-                <Label htmlFor="currentPassword">Current Password</Label>
+                <Label htmlFor="currentPassword" className="text-sm">Current Password</Label>
                 <Input
                   id="currentPassword"
                   type="password"
@@ -345,7 +346,7 @@ export default function Profile() {
               <Separator />
 
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New Password</Label>
+                <Label htmlFor="newPassword" className="text-sm">New Password</Label>
                 <Input
                   id="newPassword"
                   type="password"
@@ -357,7 +358,7 @@ export default function Profile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                <Label htmlFor="confirmPassword" className="text-sm">Confirm New Password</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -371,6 +372,7 @@ export default function Profile() {
               <Button 
                 type="submit" 
                 disabled={passwordLoading}
+                className="w-full sm:w-auto"
                 data-testid="button-change-password"
               >
                 {passwordLoading ? (
