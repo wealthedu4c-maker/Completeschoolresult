@@ -501,6 +501,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         schoolId: req.user!.schoolId!,
         requestedBy: req.user!.id,
       });
+
+      // Notify all super admins about the new PIN request
+      const school = await storage.getSchool(req.user!.schoolId!);
+      const allUsers = await storage.listUsers();
+      const superAdmins = allUsers.filter(u => u.role === "super_admin");
+      
+      for (const admin of superAdmins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "pin_request",
+          title: "New PIN Request",
+          message: `${school?.name || 'A school'} has requested ${validated.quantity} PINs for ${validated.session} ${validated.term} Term.`,
+          data: { requestId: request.id, schoolId: req.user!.schoolId },
+        });
+      }
+
       res.status(201).json(request);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1143,6 +1159,472 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `Uploaded ${uploadResults.success} results successfully`,
         ...uploadResults,
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===== SCORE METRICS ROUTES =====
+  app.get("/api/score-metrics", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+      const metrics = await storage.listScoreMetrics(schoolId);
+      res.json(metrics);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/score-metrics", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const { name, maxScore, weight, order } = req.body;
+      
+      const metric = await storage.createScoreMetric({
+        schoolId,
+        name,
+        maxScore: Number(maxScore),
+        weight: String(weight || 1),
+        order: Number(order || 0),
+        createdBy: req.user!.id,
+      });
+
+      res.status(201).json(metric);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/score-metrics/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const metric = await storage.getScoreMetric(req.params.id);
+      if (!metric) {
+        return res.status(404).json({ message: "Score metric not found" });
+      }
+      if (metric.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update metrics from other schools" });
+      }
+
+      const updated = await storage.updateScoreMetric(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/score-metrics/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const metric = await storage.getScoreMetric(req.params.id);
+      if (!metric) {
+        return res.status(404).json({ message: "Score metric not found" });
+      }
+      if (metric.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot delete metrics from other schools" });
+      }
+
+      await storage.deleteScoreMetric(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk update score metrics order
+  app.put("/api/score-metrics/order", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const { metrics } = req.body; // Array of {id, order}
+      if (!Array.isArray(metrics)) {
+        return res.status(400).json({ message: "Invalid metrics array" });
+      }
+
+      for (const m of metrics) {
+        const metric = await storage.getScoreMetric(m.id);
+        if (metric && metric.schoolId === req.user!.schoolId) {
+          await storage.updateScoreMetric(m.id, { order: m.order });
+        }
+      }
+
+      const updated = await storage.listScoreMetrics(req.user!.schoolId!);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== CLASS SUBJECTS ROUTES =====
+  app.get("/api/classes/:classId/subjects", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const classSubjectsList = await storage.getClassSubjects(req.params.classId);
+      res.json(classSubjectsList);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/classes/:classId/subjects", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const { subjectIds } = req.body;
+      if (!Array.isArray(subjectIds)) {
+        return res.status(400).json({ message: "Invalid subjectIds array" });
+      }
+
+      const result = await storage.setClassSubjects(schoolId, req.params.classId, subjectIds);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== NOTIFICATIONS ROUTES =====
+  app.get("/api/notifications", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const notificationsList = await storage.listNotifications(req.user!.id, limit);
+      res.json(notificationsList);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const count = await storage.countUnreadNotifications(req.user!.id);
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const notification = await storage.markNotificationRead(req.params.id);
+      res.json(notification);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", authenticate, async (req: AuthRequest, res) => {
+    try {
+      await storage.markAllNotificationsRead(req.user!.id);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===== TEACHER ASSIGNMENTS ROUTES =====
+  app.get("/api/teacher-assignments", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      // Get all teachers for this school with their assignments
+      const teachers = await storage.listUsers(schoolId);
+      const teachersList = teachers.filter(u => u.role === "teacher");
+
+      const result = await Promise.all(teachersList.map(async (teacher) => {
+        const assignments = await storage.getTeacherAssignments(teacher.id);
+        return {
+          teacher: {
+            id: teacher.id,
+            firstName: teacher.firstName,
+            lastName: teacher.lastName,
+            email: teacher.email,
+          },
+          assignments,
+        };
+      }));
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/teacher-assignments/:teacherId", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const assignments = await storage.getTeacherAssignments(req.params.teacherId);
+      res.json(assignments);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/teacher-assignments/:teacherId", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const { assignments } = req.body; // Array of {classId, subjectId}
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ message: "Invalid assignments array" });
+      }
+
+      const result = await storage.setTeacherAssignments(schoolId, req.params.teacherId, assignments);
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== RESULT WORKFLOW ROUTES =====
+  
+  // Submit result (moves from draft to submitted)
+  app.post("/api/results/:id/submit", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.getResult(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      if (result.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot submit results from other schools" });
+      }
+
+      if (result.status !== "draft" && result.status !== "rejected") {
+        return res.status(400).json({ message: "Only draft or rejected results can be submitted" });
+      }
+
+      const updated = await storage.updateResult(req.params.id, {
+        status: "submitted",
+        rejectionReason: null,
+      });
+
+      // Notify school admin about submitted result
+      const schoolAdmins = await storage.listUsers(req.user!.schoolId!);
+      for (const admin of schoolAdmins.filter(u => u.role === "school_admin")) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "result_submitted",
+          title: "Result Submitted for Review",
+          message: `A new result has been submitted for review for ${result.session} ${result.term} Term.`,
+          data: { resultId: result.id },
+        });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Approve result (moves from submitted to approved)
+  app.post("/api/results/:id/approve", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.getResult(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      if (result.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot approve results from other schools" });
+      }
+
+      // Check if school has logo
+      const school = await storage.getSchool(req.user!.schoolId!);
+      if (!school?.logo) {
+        return res.status(400).json({ message: "School logo is required before approving results. Please upload a logo in school settings." });
+      }
+
+      if (result.status !== "submitted") {
+        return res.status(400).json({ message: "Only submitted results can be approved" });
+      }
+
+      const updated = await storage.updateResult(req.params.id, {
+        status: "approved",
+        approvedBy: req.user!.id,
+        approvedAt: new Date(),
+      });
+
+      // Notify the uploader
+      if (result.uploadedBy) {
+        await storage.createNotification({
+          userId: result.uploadedBy,
+          type: "result_approved",
+          title: "Result Approved",
+          message: `Your result for ${result.session} ${result.term} Term has been approved.`,
+          data: { resultId: result.id },
+        });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Reject result (moves from submitted back to draft/rejected)
+  app.post("/api/results/:id/reject", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.getResult(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      if (result.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot reject results from other schools" });
+      }
+
+      if (result.status !== "submitted") {
+        return res.status(400).json({ message: "Only submitted results can be rejected" });
+      }
+
+      const { reason } = req.body;
+      if (!reason) {
+        return res.status(400).json({ message: "Rejection reason is required" });
+      }
+
+      const updated = await storage.updateResult(req.params.id, {
+        status: "rejected",
+        rejectionReason: reason,
+      });
+
+      // Notify the uploader
+      if (result.uploadedBy) {
+        await storage.createNotification({
+          userId: result.uploadedBy,
+          type: "result_rejected",
+          title: "Result Rejected",
+          message: `Your result for ${result.session} ${result.term} Term has been rejected. Reason: ${reason}`,
+          data: { resultId: result.id, reason },
+        });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Publish result (moves from approved to published - permanent)
+  app.post("/api/results/:id/publish", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.getResult(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      if (result.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot publish results from other schools" });
+      }
+
+      if (result.status !== "approved") {
+        return res.status(400).json({ message: "Only approved results can be published" });
+      }
+
+      const updated = await storage.updateResult(req.params.id, {
+        status: "published",
+        publishedAt: new Date(),
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Add comment to result
+  app.post("/api/results/:id/comment", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
+    try {
+      const result = await storage.getResult(req.params.id);
+      if (!result) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      if (result.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot comment on results from other schools" });
+      }
+
+      const { teacherComment, principalComment } = req.body;
+      
+      const updates: any = {};
+      if (teacherComment !== undefined) {
+        updates.teacherComment = teacherComment;
+      }
+      if (principalComment !== undefined && req.user!.role === "school_admin") {
+        updates.principalComment = principalComment;
+      }
+
+      const updated = await storage.updateResult(req.params.id, updates);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== CSV TEMPLATE DOWNLOAD =====
+  app.get("/api/csv-template/:classId", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      // Get class info
+      const classData = await storage.getClass(req.params.classId);
+      if (!classData || classData.schoolId !== schoolId) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+
+      // Get subjects assigned to this class
+      const classSubjectsList = await storage.getClassSubjects(req.params.classId);
+      const subjectIds = classSubjectsList.map(cs => cs.subjectId);
+
+      const allSubjects = await storage.listSubjects(schoolId);
+      const classSubjectsData = allSubjects.filter(s => subjectIds.includes(s.id));
+
+      // Get score metrics for this school
+      const metrics = await storage.listScoreMetrics(schoolId);
+
+      // If no custom metrics, use defaults
+      const metricColumns = metrics.length > 0 
+        ? metrics.map(m => m.name)
+        : ["CA1", "CA2", "Exam"];
+
+      // Build CSV header
+      const subjectColumns: string[] = [];
+      for (const subject of classSubjectsData) {
+        for (const metric of metricColumns) {
+          subjectColumns.push(`${subject.name}_${metric}`);
+        }
+      }
+
+      const header = ["AdmissionNumber", "StudentName", ...subjectColumns].join(",");
+      
+      // Get students in this class for sample rows
+      const students = await storage.listStudents(schoolId);
+      const classStudents = students.filter(s => s.class === classData.name);
+
+      const rows = classStudents.slice(0, 5).map(student => {
+        const values = [student.admissionNumber, `${student.firstName} ${student.lastName}`];
+        for (let i = 0; i < subjectColumns.length; i++) {
+          values.push(""); // Empty score placeholder
+        }
+        return values.join(",");
+      });
+
+      const csv = [header, ...rows].join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename=result_template_${classData.name}.csv`);
+      res.send(csv);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
