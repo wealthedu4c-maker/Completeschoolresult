@@ -40,21 +40,23 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 export const schools = pgTable("schools", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 255 }).notNull(),
-  code: varchar("code", { length: 50 }).notNull().unique(),
-  address: text("address").notNull(),
-  city: varchar("city", { length: 100 }).notNull(),
-  state: varchar("state", { length: 100 }).notNull(),
-  country: varchar("country", { length: 100 }).default("Nigeria").notNull(),
-  phone: varchar("phone", { length: 20 }).notNull(),
+  code: varchar("code", { length: 50 }).unique(),
+  subdomain: varchar("subdomain", { length: 50 }).unique(),
+  address: text("address"),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 100 }),
+  country: varchar("country", { length: 100 }).default("Nigeria"),
+  phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 255 }).notNull(),
   logo: text("logo"),
   motto: text("motto"),
-  isActive: boolean("is_active").default(true).notNull(),
-  createdBy: uuid("created_by").notNull(),
+  isActive: boolean("is_active").default(false).notNull(),
+  createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   codeIdx: index("schools_code_idx").on(table.code),
+  subdomainIdx: index("schools_subdomain_idx").on(table.subdomain),
   activeIdx: index("schools_active_idx").on(table.isActive),
 }));
 
@@ -127,7 +129,8 @@ export const results = pgTable("results", {
   teacherComment: text("teacher_comment"),
   principalComment: text("principal_comment"),
   attendance: jsonb("attendance"), // {present: number, absent: number, total: number}
-  status: varchar("status", { length: 20 }).default("draft").notNull(), // 'draft', 'submitted', 'approved', 'rejected'
+  status: varchar("status", { length: 20 }).default("draft").notNull(), // 'draft', 'submitted', 'approved', 'rejected', 'published'
+  publishedAt: timestamp("published_at"),
   approvedBy: uuid("approved_by"),
   approvedAt: timestamp("approved_at"),
   rejectionReason: text("rejection_reason"),
@@ -299,6 +302,78 @@ export const teacherAssignmentsRelations = relations(teacherAssignments, ({ one 
   }),
 }));
 
+// ===== SCORE METRICS TABLE =====
+export const scoreMetrics = pgTable("score_metrics", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull(),
+  name: varchar("name", { length: 100 }).notNull(), // e.g., "CA1", "Assessment", "Project", "Exam"
+  maxScore: integer("max_score").notNull(), // Maximum score for this metric
+  weight: decimal("weight", { precision: 5, scale: 2 }).default("1").notNull(), // Weight for calculation
+  order: integer("order").default(0).notNull(), // Display order
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  schoolOrderIdx: index("score_metrics_school_order_idx").on(table.schoolId, table.order),
+}));
+
+export const scoreMetricsRelations = relations(scoreMetrics, ({ one }) => ({
+  school: one(schools, {
+    fields: [scoreMetrics.schoolId],
+    references: [schools.id],
+  }),
+}));
+
+// ===== CLASS SUBJECTS TABLE (Junction) =====
+export const classSubjects = pgTable("class_subjects", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull(),
+  classId: uuid("class_id").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  classSubjectIdx: index("class_subjects_class_subject_idx").on(table.classId, table.subjectId),
+  schoolClassIdx: index("class_subjects_school_class_idx").on(table.schoolId, table.classId),
+}));
+
+export const classSubjectsRelations = relations(classSubjects, ({ one }) => ({
+  school: one(schools, {
+    fields: [classSubjects.schoolId],
+    references: [schools.id],
+  }),
+  class: one(classes, {
+    fields: [classSubjects.classId],
+    references: [classes.id],
+  }),
+  subject: one(subjects, {
+    fields: [classSubjects.subjectId],
+    references: [subjects.id],
+  }),
+}));
+
+// ===== NOTIFICATIONS TABLE =====
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(), // Target user
+  type: varchar("type", { length: 50 }).notNull(), // 'result_submitted', 'result_approved', 'result_rejected', 'pin_request', etc.
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  data: jsonb("data"), // Additional data (resultId, requestId, etc.)
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  userReadIdx: index("notifications_user_read_idx").on(table.userId, table.isRead),
+  userCreatedIdx: index("notifications_user_created_idx").on(table.userId, table.createdAt),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 // ===== AUDIT LOGS TABLE =====
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -376,6 +451,9 @@ export const insertClassSchema = createInsertSchema(classes).omit({ id: true, cr
 export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTeacherAssignmentSchema = createInsertSchema(teacherAssignments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export const insertScoreMetricSchema = createInsertSchema(scoreMetrics).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertClassSubjectSchema = createInsertSchema(classSubjects).omit({ id: true, createdAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 
 // ===== TYPES =====
 export type User = typeof users.$inferSelect;
@@ -405,3 +483,9 @@ export type TeacherAssignment = typeof teacherAssignments.$inferSelect;
 export type InsertTeacherAssignment = z.infer<typeof insertTeacherAssignmentSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type ScoreMetric = typeof scoreMetrics.$inferSelect;
+export type InsertScoreMetric = z.infer<typeof insertScoreMetricSchema>;
+export type ClassSubject = typeof classSubjects.$inferSelect;
+export type InsertClassSubject = z.infer<typeof insertClassSubjectSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;

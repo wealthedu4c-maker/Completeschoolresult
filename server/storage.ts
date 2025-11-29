@@ -9,6 +9,9 @@ import {
   subjects,
   teacherAssignments,
   auditLogs,
+  scoreMetrics,
+  classSubjects,
+  notifications,
   type User, 
   type InsertUser,
   type School,
@@ -26,6 +29,14 @@ import {
   type Subject,
   type InsertSubject,
   type InsertAuditLog,
+  type ScoreMetric,
+  type InsertScoreMetric,
+  type ClassSubject,
+  type InsertClassSubject,
+  type Notification,
+  type InsertNotification,
+  type TeacherAssignment,
+  type InsertTeacherAssignment,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -95,6 +106,31 @@ export interface IStorage {
 
   // Audit Logs
   createAuditLog(log: InsertAuditLog): Promise<void>;
+
+  // Score Metrics
+  getScoreMetric(id: string): Promise<ScoreMetric | undefined>;
+  createScoreMetric(metric: InsertScoreMetric): Promise<ScoreMetric>;
+  updateScoreMetric(id: string, data: Partial<InsertScoreMetric>): Promise<ScoreMetric>;
+  listScoreMetrics(schoolId: string): Promise<ScoreMetric[]>;
+  deleteScoreMetric(id: string): Promise<void>;
+
+  // Class Subjects
+  getClassSubjects(classId: string): Promise<ClassSubject[]>;
+  setClassSubjects(schoolId: string, classId: string, subjectIds: string[]): Promise<ClassSubject[]>;
+  deleteClassSubjects(classId: string): Promise<void>;
+
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  listNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  markNotificationRead(id: string): Promise<Notification>;
+  markAllNotificationsRead(userId: string): Promise<void>;
+  countUnreadNotifications(userId: string): Promise<number>;
+
+  // Teacher Assignments (enhanced)
+  getTeacherAssignments(teacherId: string): Promise<TeacherAssignment[]>;
+  createTeacherAssignment(assignment: InsertTeacherAssignment): Promise<TeacherAssignment>;
+  deleteTeacherAssignment(id: string): Promise<void>;
+  setTeacherAssignments(schoolId: string, teacherId: string, assignments: { classId: string; subjectId: string }[]): Promise<TeacherAssignment[]>;
 
   // Analytics
   getDashboardStats(userId: string, role: string, schoolId?: string): Promise<any>;
@@ -441,6 +477,129 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {};
+  }
+
+  // Score Metrics
+  async getScoreMetric(id: string): Promise<ScoreMetric | undefined> {
+    const [metric] = await db.select().from(scoreMetrics).where(eq(scoreMetrics.id, id));
+    return metric || undefined;
+  }
+
+  async createScoreMetric(metric: InsertScoreMetric): Promise<ScoreMetric> {
+    const [metricRecord] = await db.insert(scoreMetrics).values(metric).returning();
+    return metricRecord;
+  }
+
+  async updateScoreMetric(id: string, data: Partial<InsertScoreMetric>): Promise<ScoreMetric> {
+    const [metricRecord] = await db.update(scoreMetrics)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(scoreMetrics.id, id))
+      .returning();
+    return metricRecord;
+  }
+
+  async listScoreMetrics(schoolId: string): Promise<ScoreMetric[]> {
+    return await db.select()
+      .from(scoreMetrics)
+      .where(and(eq(scoreMetrics.schoolId, schoolId), eq(scoreMetrics.isActive, true)))
+      .orderBy(scoreMetrics.order);
+  }
+
+  async deleteScoreMetric(id: string): Promise<void> {
+    await db.update(scoreMetrics)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(scoreMetrics.id, id));
+  }
+
+  // Class Subjects
+  async getClassSubjects(classId: string): Promise<ClassSubject[]> {
+    return await db.select().from(classSubjects).where(eq(classSubjects.classId, classId));
+  }
+
+  async setClassSubjects(schoolId: string, classId: string, subjectIds: string[]): Promise<ClassSubject[]> {
+    await db.delete(classSubjects).where(eq(classSubjects.classId, classId));
+    
+    if (subjectIds.length === 0) return [];
+    
+    const newRecords = subjectIds.map(subjectId => ({
+      schoolId,
+      classId,
+      subjectId,
+    }));
+    
+    return await db.insert(classSubjects).values(newRecords).returning();
+  }
+
+  async deleteClassSubjects(classId: string): Promise<void> {
+    await db.delete(classSubjects).where(eq(classSubjects.classId, classId));
+  }
+
+  // Notifications
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [record] = await db.insert(notifications).values(notification).returning();
+    return record;
+  }
+
+  async listNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
+    return await db.select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+  }
+
+  async markNotificationRead(id: string): Promise<Notification> {
+    const [record] = await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id))
+      .returning();
+    return record;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.userId, userId));
+  }
+
+  async countUnreadNotifications(userId: string): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return Number(result.count);
+  }
+
+  // Teacher Assignments (enhanced)
+  async getTeacherAssignments(teacherId: string): Promise<TeacherAssignment[]> {
+    return await db.select().from(teacherAssignments).where(eq(teacherAssignments.teacherId, teacherId));
+  }
+
+  async createTeacherAssignment(assignment: InsertTeacherAssignment): Promise<TeacherAssignment> {
+    const [record] = await db.insert(teacherAssignments).values(assignment).returning();
+    return record;
+  }
+
+  async deleteTeacherAssignment(id: string): Promise<void> {
+    await db.delete(teacherAssignments).where(eq(teacherAssignments.id, id));
+  }
+
+  async setTeacherAssignments(schoolId: string, teacherId: string, assignments: { classId: string; subjectId: string }[]): Promise<TeacherAssignment[]> {
+    await db.delete(teacherAssignments).where(eq(teacherAssignments.teacherId, teacherId));
+    
+    if (assignments.length === 0) return [];
+    
+    const currentYear = new Date().getFullYear();
+    const academicYear = `${currentYear}/${currentYear + 1}`;
+    
+    const newRecords = assignments.map(a => ({
+      schoolId,
+      teacherId,
+      classId: a.classId,
+      subjectId: a.subjectId,
+      academicYear,
+    }));
+    
+    return await db.insert(teacherAssignments).values(newRecords).returning();
   }
 }
 
