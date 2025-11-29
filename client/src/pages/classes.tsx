@@ -296,7 +296,7 @@ export default function Classes() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+        <DialogContent className="max-w-md mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingClass 
@@ -566,7 +566,7 @@ export default function Classes() {
       </Dialog>
 
       <Dialog open={isSubjectDialogOpen} onOpenChange={(open) => !open && closeSubjectDialog()}>
-        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+        <DialogContent className="max-w-md mx-4 sm:mx-auto max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Assign Subjects to {selectedClass?.name}</DialogTitle>
             <DialogDescription>
@@ -578,9 +578,9 @@ export default function Classes() {
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : (
-            <>
-              <ScrollArea className="h-[300px] pr-4">
-                <div className="space-y-3">
+            <div className="flex flex-col flex-1 min-h-0">
+              <ScrollArea className="flex-1 max-h-[50vh] pr-4 border rounded-lg">
+                <div className="p-3 space-y-2">
                   {subjects.length === 0 ? (
                     <p className="text-muted-foreground text-center py-4">
                       No subjects available. Please add subjects first.
@@ -617,7 +617,10 @@ export default function Classes() {
                   )}
                 </div>
               </ScrollArea>
-              <div className="flex justify-end gap-2 pt-4 border-t">
+              <div className="text-sm text-muted-foreground py-2">
+                {selectedSubjects.length} subject(s) selected
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <Button variant="outline" onClick={closeSubjectDialog}>
                   Cancel
                 </Button>
@@ -639,7 +642,7 @@ export default function Classes() {
                   Save Changes
                 </Button>
               </div>
-            </>
+            </div>
           )}
         </DialogContent>
       </Dialog>
