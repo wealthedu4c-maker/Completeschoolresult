@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Copy, CheckCircle, XCircle, Key, Search, Download, FileText, FileSpreadsheet } from "lucide-react";
+import { Plus, Copy, CheckCircle, XCircle, Key, Search, Download, FileText, FileSpreadsheet, CalendarIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -39,12 +44,24 @@ export default function Pins() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [quantity, setQuantity] = useState("10");
-  const [session, setSession] = useState("");
+  const [session, setSession] = useState("2024/2025");
   const [term, setTerm] = useState("First");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
   const [maxUsageCount, setMaxUsageCount] = useState("1");
+  const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
+  const [neverExpires, setNeverExpires] = useState(false);
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+  const sessionOptions = useMemo(() => {
+    const options = [];
+    for (let year = 2024; year <= 2098; year++) {
+      options.push(`${year}/${year + 1}`);
+    }
+    return options;
+  }, []);
+
+  const termOptions = ["First", "Second", "Third"];
   const isSuperAdmin = user.role === "super_admin";
 
   const { data: pins, isLoading } = useQuery<PIN[]>({
@@ -64,6 +81,8 @@ export default function Pins() {
       setQuantity("10");
       setMaxUsageCount("1");
       setSelectedSchoolId("");
+      setExpiryDate(undefined);
+      setNeverExpires(false);
       toast({ title: "Success", description: "PINs generated successfully" });
     },
     onError: (error: any) => {
@@ -80,12 +99,22 @@ export default function Pins() {
       return;
     }
 
+    if (!neverExpires && !expiryDate) {
+      toast({ variant: "destructive", title: "Error", description: "Please select an expiry date or check 'Never Expires'" });
+      return;
+    }
+
+    const calculatedExpiryDate = neverExpires 
+      ? new Date("2099-12-31") 
+      : expiryDate;
+
     await generateMutation.mutateAsync({
       schoolId,
       quantity: parseInt(quantity),
       session,
       term,
       maxUsageCount: parseInt(maxUsageCount),
+      expiryDate: calculatedExpiryDate?.toISOString(),
       generatedBy: user.id,
     });
   };
@@ -101,6 +130,9 @@ export default function Pins() {
       const usageCount = (pin as any).usageCount || 0;
       const maxUsage = (pin as any).maxUsageCount || 1;
       const isExhausted = usageCount >= maxUsage;
+      const expiryDisplay = new Date(pin.expiryDate).getFullYear() >= 2099 
+        ? "Never" 
+        : new Date(pin.expiryDate).toLocaleDateString();
       return [
         pin.pin,
         pin.session,
@@ -108,7 +140,7 @@ export default function Pins() {
         isExhausted ? "Exhausted" : "Available",
         usageCount.toString(),
         maxUsage.toString(),
-        new Date(pin.expiryDate).toLocaleDateString(),
+        expiryDisplay,
       ];
     });
 
@@ -139,13 +171,16 @@ export default function Pins() {
       const usageCount = (pin as any).usageCount || 0;
       const maxUsage = (pin as any).maxUsageCount || 1;
       const isExhausted = usageCount >= maxUsage;
+      const expiryDisplay = new Date(pin.expiryDate).getFullYear() >= 2099 
+        ? "Never" 
+        : new Date(pin.expiryDate).toLocaleDateString();
       return [
         pin.pin,
         pin.session,
         pin.term,
         isExhausted ? "Exhausted" : "Available",
         `${usageCount}/${maxUsage}`,
-        new Date(pin.expiryDate).toLocaleDateString(),
+        expiryDisplay,
       ];
     });
 
@@ -340,7 +375,11 @@ export default function Pins() {
                       <div>Session: {pin.session}</div>
                       <div>Term: {pin.term}</div>
                       <div>Usage: {usageCount} / {maxUsage}</div>
-                      <div>Expires: {new Date(pin.expiryDate).toLocaleDateString()}</div>
+                      <div>Expires: {
+                        new Date(pin.expiryDate).getFullYear() >= 2099 
+                          ? "Never" 
+                          : new Date(pin.expiryDate).toLocaleDateString()
+                      }</div>
                     </div>
                   </div>
                 </Card>
@@ -412,24 +451,86 @@ export default function Pins() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="session">Session</Label>
-                <Input
-                  id="session"
-                  placeholder="2023/2024"
-                  value={session}
-                  onChange={(e) => setSession(e.target.value)}
-                  data-testid="input-session"
-                />
+                <Select value={session} onValueChange={setSession}>
+                  <SelectTrigger data-testid="select-session">
+                    <SelectValue placeholder="Select session" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {sessionOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="term">Term</Label>
-                <Input
-                  id="term"
-                  placeholder="First, Second..."
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  data-testid="input-term"
-                />
+                <Select value={term} onValueChange={setTerm}>
+                  <SelectTrigger data-testid="select-term">
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {termOptions.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Expiry Date</Label>
+              <div className="flex flex-col gap-3">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !expiryDate && !neverExpires && "text-muted-foreground"
+                      )}
+                      disabled={neverExpires}
+                      data-testid="button-expiry-date"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {neverExpires 
+                        ? "Never Expires" 
+                        : expiryDate 
+                          ? format(expiryDate, "PPP") 
+                          : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={expiryDate}
+                      onSelect={setExpiryDate}
+                      initialFocus
+                      disabled={(date) => date < new Date()}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="neverExpires" 
+                    checked={neverExpires} 
+                    onCheckedChange={(checked) => {
+                      setNeverExpires(checked as boolean);
+                      if (checked) setExpiryDate(undefined);
+                    }}
+                    data-testid="checkbox-never-expires"
+                  />
+                  <label 
+                    htmlFor="neverExpires" 
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Never Expires (Forever)
+                  </label>
+                </div>
               </div>
             </div>
 
