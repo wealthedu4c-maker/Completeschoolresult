@@ -83,7 +83,8 @@ export default function Schools() {
 
   const filteredSchools = schools?.filter((school) =>
     school.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    school.code.toLowerCase().includes(searchQuery.toLowerCase())
+    (school.code && school.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (school.subdomain && school.subdomain.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -114,14 +115,13 @@ export default function Schools() {
           />
         </div>
 
-        <div className="rounded-lg border">
+        <div className="rounded-lg border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Contact</TableHead>
+                <TableHead>Subdomain</TableHead>
+                <TableHead className="hidden md:table-cell">Contact</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -129,34 +129,42 @@ export default function Schools() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={5} className="text-center py-8">
                     Loading schools...
                   </TableCell>
                 </TableRow>
               ) : filteredSchools && filteredSchools.length > 0 ? (
                 filteredSchools.map((school) => (
                   <TableRow key={school.id} data-testid={`row-school-${school.id}`}>
-                    <TableCell className="font-medium">{school.name}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="font-mono">{school.code}</Badge>
+                      <div className="font-medium">{school.name}</div>
+                      {school.code && (
+                        <Badge variant="outline" className="font-mono text-xs mt-1">{school.code}</Badge>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {school.city}, {school.state}
+                    <TableCell>
+                      {school.subdomain ? (
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {school.subdomain}.smartresult.app
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="hidden md:table-cell text-sm">
                       <div>{school.email}</div>
-                      <div className="text-muted-foreground">{school.phone}</div>
+                      {school.phone && <div className="text-muted-foreground">{school.phone}</div>}
                     </TableCell>
                     <TableCell>
                       <Badge variant={school.isActive ? "default" : "secondary"}>
-                        {school.isActive ? "Active" : "Inactive"}
+                        {school.isActive ? "Active" : "Pending"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
                           onClick={() => {
                             setSelectedSchool(school);
                             setDialogOpen(true);
@@ -167,7 +175,7 @@ export default function Schools() {
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="icon"
                           onClick={() => {
                             if (confirm("Are you sure you want to delete this school?")) {
                               deleteMutation.mutate(school.id);
@@ -183,7 +191,7 @@ export default function Schools() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     No schools found
                   </TableCell>
                 </TableRow>

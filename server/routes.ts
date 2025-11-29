@@ -100,11 +100,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/schools", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
     try {
-      const validated = insertSchoolSchema.parse(req.body);
+      const { name, code, email, subdomain, logo, initialPassword } = req.body;
+      
+      if (!name || !email || !subdomain) {
+        return res.status(400).json({ message: "Name, email and subdomain are required" });
+      }
+      
+      // Check if subdomain already exists
+      const existingSchool = await storage.getSchoolBySubdomain(subdomain);
+      if (existingSchool) {
+        return res.status(400).json({ message: "Subdomain is already in use" });
+      }
+      
+      // Check if email is already used
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email is already registered" });
+      }
+      
+      // Generate school code if not provided
+      const schoolCode = code || name.replace(/[^a-zA-Z]/g, "").substring(0, 3).toUpperCase() + 
+        Math.floor(1000 + Math.random() * 9000);
+      
+      // Create the school first
       const school = await storage.createSchool({
-        ...validated,
+        name,
+        code: schoolCode,
+        subdomain: subdomain.toLowerCase(),
+        email,
+        logo: logo || null,
+        isActive: true, // Super admin created schools are automatically active
         createdBy: req.user!.id,
       });
+      
+      // Create school admin user if initialPassword is provided
+      if (initialPassword) {
+        const hashedPassword = await bcrypt.hash(initialPassword, 10);
+        await storage.createUser({
+          email,
+          password: hashedPassword,
+          firstName: "School",
+          lastName: "Admin",
+          role: "school_admin",
+          schoolId: school.id,
+          isActive: true,
+          createdBy: req.user!.id,
+        });
+      }
+      
       res.status(201).json(school);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
