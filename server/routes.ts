@@ -305,8 +305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createAuditLog({
         userId: req.user!.id,
         action: "approve_result",
-        entityType: "result",
-        entityId: req.params.id,
+        resource: "result",
+        resourceId: req.params.id,
         details: { resultId: req.params.id, studentId: existing.studentId },
       });
 
@@ -347,8 +347,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.createAuditLog({
         userId: req.user!.id,
         action: "reject_result",
-        entityType: "result",
-        entityId: req.params.id,
+        resource: "result",
+        resourceId: req.params.id,
         details: { resultId: req.params.id, studentId: existing.studentId, reason: req.body.reason },
       });
 
@@ -548,6 +548,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/users/:id", authenticate, authorize("super_admin", "school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // School admins can only update users from their school
+      if (req.user!.role === "school_admin" && user.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update users from other schools" });
+      }
+
+      const updated = await storage.updateUser(req.params.id, req.body);
+      const { password, ...userWithoutPassword } = updated;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // ===== CLASSES ROUTES =====
   app.get("/api/classes", authenticate, async (req: AuthRequest, res) => {
     try {
@@ -574,6 +594,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/classes/:id", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
+    try {
+      // Verify class belongs to user's school for school admins
+      const classRecord = await storage.getClass(req.params.id);
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+      
+      if (req.user!.role === "school_admin" && classRecord.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot delete classes from other schools" });
+      }
+      
+      // Use schoolId-scoped delete for extra security
+      const schoolIdToCheck = req.user!.role === "school_admin" ? req.user!.schoolId : undefined;
+      await storage.deleteClass(req.params.id, schoolIdToCheck);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ===== SUBJECTS ROUTES =====
   app.get("/api/subjects", authenticate, async (req: AuthRequest, res) => {
     try {
@@ -595,6 +636,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.user!.id,
       });
       res.status(201).json(subject);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/subjects/:id", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
+    try {
+      // Verify subject belongs to user's school for school admins
+      const subject = await storage.getSubject(req.params.id);
+      if (!subject) {
+        return res.status(404).json({ message: "Subject not found" });
+      }
+      
+      if (req.user!.role === "school_admin" && subject.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot delete subjects from other schools" });
+      }
+      
+      // Use schoolId-scoped delete for extra security
+      const schoolIdToCheck = req.user!.role === "school_admin" ? req.user!.schoolId : undefined;
+      await storage.deleteSubject(req.params.id, schoolIdToCheck);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===== PIN REQUEST APPROVAL ROUTES =====
+  app.post("/api/pin-requests/:id/approve", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
+    try {
+      const request = await storage.getPinRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "PIN request not found" });
+      }
+
+      if (request.status !== "pending") {
+        return res.status(400).json({ message: "Request has already been processed" });
+      }
+
+      // Generate PINs for the approved request
+      const pinsToCreate = [];
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + 6);
+
+      for (let i = 0; i < request.quantity; i++) {
+        pinsToCreate.push({
+          schoolId: request.schoolId,
+          pin: generatePIN(),
+          session: request.session,
+          term: request.term,
+          expiryDate,
+          generatedBy: req.user!.id,
+        });
+      }
+
+      const pins = await storage.createPins(pinsToCreate);
+
+      // Update request status
+      const updated = await storage.updatePinRequest(req.params.id, {
+        status: "approved",
+        processedBy: req.user!.id,
+        processedAt: new Date(),
+        generatedPinIds: pins.map(p => p.id),
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/pin-requests/:id/reject", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
+    try {
+      const request = await storage.getPinRequest(req.params.id);
+      if (!request) {
+        return res.status(404).json({ message: "PIN request not found" });
+      }
+
+      if (request.status !== "pending") {
+        return res.status(400).json({ message: "Request has already been processed" });
+      }
+
+      const updated = await storage.updatePinRequest(req.params.id, {
+        status: "rejected",
+        processedBy: req.user!.id,
+        processedAt: new Date(),
+        rejectionReason: req.body.reason,
+      });
+
+      res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

@@ -70,17 +70,22 @@ export interface IStorage {
   deletePin(id: string): Promise<void>;
 
   // PIN Requests
+  getPinRequest(id: string): Promise<PINRequest | undefined>;
   createPinRequest(request: InsertPINRequest): Promise<PINRequest>;
   listPinRequests(schoolId?: string): Promise<PINRequest[]>;
-  updatePinRequest(id: string, data: Partial<InsertPINRequest>): Promise<PINRequest>;
+  updatePinRequest(id: string, data: Partial<any>): Promise<PINRequest>;
 
   // Classes
+  getClass(id: string): Promise<Class | undefined>;
   createClass(classData: InsertClass): Promise<Class>;
   listClasses(schoolId: string): Promise<Class[]>;
+  deleteClass(id: string, schoolId?: string): Promise<void>;
 
   // Subjects
+  getSubject(id: string): Promise<Subject | undefined>;
   createSubject(subject: InsertSubject): Promise<Subject>;
   listSubjects(schoolId: string): Promise<Subject[]>;
+  deleteSubject(id: string, schoolId?: string): Promise<void>;
 
   // Audit Logs
   createAuditLog(log: InsertAuditLog): Promise<void>;
@@ -206,19 +211,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listResults(schoolId: string, filters?: { status?: string; session?: string; term?: string }): Promise<Result[]> {
-    let query = db.select().from(results).where(eq(results.schoolId, schoolId));
+    const conditions = [eq(results.schoolId, schoolId)];
     
     if (filters?.status) {
-      query = query.where(eq(results.status, filters.status)) as any;
+      conditions.push(eq(results.status, filters.status));
     }
     if (filters?.session) {
-      query = query.where(eq(results.session, filters.session)) as any;
+      conditions.push(eq(results.session, filters.session));
     }
     if (filters?.term) {
-      query = query.where(eq(results.term, filters.term)) as any;
+      conditions.push(eq(results.term, filters.term));
     }
     
-    return await query.orderBy(desc(results.createdAt)) as any;
+    return await db.select().from(results)
+      .where(and(...conditions))
+      .orderBy(desc(results.createdAt));
   }
 
   async deleteResult(id: string): Promise<void> {
@@ -259,6 +266,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // PIN Requests
+  async getPinRequest(id: string): Promise<PINRequest | undefined> {
+    const [request] = await db.select().from(pinRequests).where(eq(pinRequests.id, id));
+    return request || undefined;
+  }
+
   async createPinRequest(request: InsertPINRequest): Promise<PINRequest> {
     const [pinRequest] = await db.insert(pinRequests).values(request).returning();
     return pinRequest;
@@ -273,7 +285,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(pinRequests).orderBy(desc(pinRequests.createdAt));
   }
 
-  async updatePinRequest(id: string, data: Partial<InsertPINRequest>): Promise<PINRequest> {
+  async updatePinRequest(id: string, data: Partial<any>): Promise<PINRequest> {
     const [request] = await db.update(pinRequests)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(pinRequests.id, id))
@@ -282,6 +294,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Classes
+  async getClass(id: string): Promise<Class | undefined> {
+    const [classRecord] = await db.select().from(classes).where(eq(classes.id, id));
+    return classRecord || undefined;
+  }
+
   async createClass(classData: InsertClass): Promise<Class> {
     const [classRecord] = await db.insert(classes).values(classData).returning();
     return classRecord;
@@ -291,7 +308,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(classes).where(eq(classes.schoolId, schoolId));
   }
 
+  async deleteClass(id: string, schoolId?: string): Promise<void> {
+    if (schoolId) {
+      await db.delete(classes).where(and(eq(classes.id, id), eq(classes.schoolId, schoolId)));
+    } else {
+      await db.delete(classes).where(eq(classes.id, id));
+    }
+  }
+
   // Subjects
+  async getSubject(id: string): Promise<Subject | undefined> {
+    const [subject] = await db.select().from(subjects).where(eq(subjects.id, id));
+    return subject || undefined;
+  }
+
   async createSubject(subject: InsertSubject): Promise<Subject> {
     const [subjectRecord] = await db.insert(subjects).values(subject).returning();
     return subjectRecord;
@@ -299,6 +329,14 @@ export class DatabaseStorage implements IStorage {
 
   async listSubjects(schoolId: string): Promise<Subject[]> {
     return await db.select().from(subjects).where(eq(subjects.schoolId, schoolId));
+  }
+
+  async deleteSubject(id: string, schoolId?: string): Promise<void> {
+    if (schoolId) {
+      await db.delete(subjects).where(and(eq(subjects.id, id), eq(subjects.schoolId, schoolId)));
+    } else {
+      await db.delete(subjects).where(eq(subjects.id, id));
+    }
   }
 
   // Audit Logs

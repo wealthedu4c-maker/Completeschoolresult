@@ -1,0 +1,263 @@
+Below is your **clean, unambiguous, highly optimized Replit AI prompt**, written specifically to maximize efficiency, reduce confusion, and ensure Replit generates only what is missing—without overwriting existing working code.
+
+This prompt tells Replit exactly what to do for **Super Admin**, **School Admin**, **Teacher**, and **Student** MVP features, including UI, backend endpoints, database logic, and responsiveness.
+
+---
+
+# ✅ **FULL REPLIT AI PROMPT (COPY & PASTE INTO REPLIT)**
+
+You are updating an existing **Result Checker Web Application**.
+Replit has already generated part of the project and created the database, so **DO NOT overwrite any existing working files**.
+Instead:
+
+* Only create files that are missing
+* Only update files that require extra functionality
+* If a file already exists, **extend it instead of rewriting it**
+* Ensure UI is fully responsive to mobile, tablet, and desktop
+* Ensure UI follows clean design, beginner-friendly usability, and accessible UX
+* Ensure backend follows RESTful conventions
+
+The system has 4 user roles: **Super Admin, School Admin, Teacher, Student**.
+
+---
+
+# 🔵 **1. SUPER ADMIN MVP — Generate/Update These Features**
+
+### **Core Functionalities**
+
+1. **Super Admin Authentication**
+
+   * Login, logout
+   * Protect all routes
+
+2. **School Management**
+
+   * Create school
+   * Edit school
+   * Delete school
+   * Upload school logo
+   * Auto-generate school subdomain (schoolname.domain.com)
+
+3. **PIN (Result Checker Code) Management**
+
+   * Generate bulk result-checker PINs for any school
+   * Assign auto-expiry rules
+   * Track PIN usage history
+
+4. **User (School Admin) Management**
+
+   * Create School Admin accounts
+   * Activate/Deactivate schools
+   * Reset passwords
+
+### **Frontend Requirements**
+
+* Build or update pages under `frontend/src/components/SuperAdmin/` (if missing).
+* Add clean dashboard with:
+
+  * Total Schools
+  * Total Students
+  * PIN Usage Stats
+  * School Activity Logs
+* Ensure pages are fully responsive and clean UI.
+
+### **Backend Requirements**
+
+* Add/update routes under:
+  `backend/routes/schoolRoutes.js`, `authRoutes.js`, `pinRoutes.js`
+* Add/update controllers:
+  `schoolController.js`, `pinController.js`, `authController.js`
+* Ensure file upload for logos using Multer or similar, saved to Cloudinary or local storage.
+
+---
+
+# 🔵 **2. SCHOOL ADMIN MVP — Generate/Update These Features**
+
+### **Core Functionalities**
+
+1. **School Admin Authentication**
+
+   * Login, logout
+   * Protected dashboard
+
+2. **Teacher Management**
+
+   * Create teacher
+   * Edit teacher
+   * Deactivate teacher
+   * Reset teacher password
+
+3. **Student Management**
+
+   * Add new students
+   * View student list
+   * Edit student details
+   * Promote students to next class
+
+4. **Result Management**
+
+   * Approve teacher-submitted results
+   * Override grades (optional)
+   * Ensure auto-grade calculation is working
+
+5. **School Settings**
+
+   * Upload or change school logo
+   * Edit school address, motto, phone, etc.
+   * Configure grading system (A,B,C,D,F thresholds)
+
+### **Frontend Requirements**
+
+* Build/update components under:
+  `frontend/src/components/Schools/`
+  `frontend/src/components/Teachers/`
+  `frontend/src/components/Students/`
+* Create responsive dashboard with:
+
+  * Students summary
+  * Teachers summary
+  * Results summary
+
+### **Backend Requirements**
+
+* Update schoolAdmin routes:
+  `schoolRoutes.js`, `studentRoutes.js`, `teacherRoutes.js`, `resultRoutes.js`
+* Update controllers:
+  `schoolController.js`, `teacherController.js`, `studentController.js`, `resultController.js`
+
+---
+
+# 🔵 **3. TEACHER MVP — Generate/Update These Features**
+
+### **Core Functionalities**
+
+1. **Teacher Authentication**
+
+   * Login, logout
+   * Protected dashboard
+
+2. **Class & Student List**
+
+   * View students in assigned class or subject
+
+3. **Upload Results**
+
+   * Fill scores for each student per subject
+   * Auto-calculation of total score
+   * Auto-calculation of grade using school's grade settings
+   * Add **Teacher Comment** for each student
+   * Submit results for approval by School Admin
+
+4. **Edit Pending Results**
+
+   * Only editable before approval
+
+### **Frontend Requirements**
+
+* Build/update:
+  `frontend/src/components/Results/ResultForm.jsx`
+  `frontend/src/components/Results/ResultsList.jsx`
+* Ensure UI is extremely simple, clear, step-by-step for novice teachers.
+
+### **Backend Requirements**
+
+* Backend routes:
+  `resultRoutes.js`
+* Controller logic:
+  `resultController.js`
+
+---
+
+# 🔵 **4. STUDENT MVP — Generate/Update These Features**
+
+Students **do not login**.
+They only check results using:
+
+* **School subdomain** (e.g., schoolname.domain.com)
+* **PIN/Access Code**
+* **Exam session or term**
+* **Student ID**
+
+### **Core Functionalities**
+
+1. **Detect school automatically** from subdomain
+2. **Verify PIN** (check active, unused, or expired)
+3. **Verify student exists** in the school
+4. **Fetch result for selected session/term**
+5. Show result with:
+
+   * School logo
+   * Student details
+   * Subject scores
+   * Auto-calculated grades
+   * Teacher comment
+   * Principal comment
+   * Summary table (Total, Average, Position if available)
+
+### **Frontend Requirements**
+
+* Create/update:
+  `frontend/src/components/Public/ResultChecker.jsx`
+* Smooth, simple UI:
+
+  * PIN Input
+  * Student ID Input
+  * Session/Term dropdown
+  * Submit button
+* Fully responsive and beginner-friendly.
+
+### **Backend Requirements**
+
+* Public route:
+  `publicRoutes.js`
+* Controller:
+  `publicController.js`
+* Ensure:
+
+  * Subdomain-based routing
+  * Result fetch logic
+  * PIN validation and usage logging
+
+---
+
+# 🔵 **5. GENERAL SYSTEM REQUIREMENTS**
+
+### **Responsiveness**
+
+* Every UI page must be fully responsive for:
+
+  * Mobile phones
+  * Tablets
+  * Desktops
+* Use TailwindCSS, clean typography, and accessible color contrasts.
+
+### **UX & Usability**
+
+* Beginner-friendly UI
+* Clearly labeled forms
+* Minimal clicks
+* Intuitive navigation panel depending on role
+
+### **Backend Architecture**
+
+* Ensure all models follow:
+  `School.js`, `User.js`, `Student.js`, `Result.js`, `PIN.js`, `AuditLog.js`
+* If models already exist, **extend without deleting fields**.
+
+### **Validation**
+
+* Implement Joi/Yup or custom validators
+* Validate all incoming data
+
+---
+
+# 🟢 **END OF PROMPT**
+
+Replit should now create or update only what is missing and make the complete MVP functional.
+
+---
+
+If you want, I can also prepare:
+✅ A second prompt specifically for **debug mode** in Replit
+✅ A third prompt specifically for **UI polishing**
+Just tell me.

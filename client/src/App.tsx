@@ -18,6 +18,11 @@ import Schools from "@/pages/schools";
 import Students from "@/pages/students";
 import Results from "@/pages/results";
 import Pins from "@/pages/pins";
+import Teachers from "@/pages/teachers";
+import Classes from "@/pages/classes";
+import Subjects from "@/pages/subjects";
+import PinRequests from "@/pages/pin-requests";
+import Users from "@/pages/users";
 
 interface User {
   id: string;
@@ -104,7 +109,35 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      {/* Teachers, Users, Classes, Subjects, PIN Requests, Analytics can be added similarly */}
+      <Route path="/teachers">
+        <ProtectedRoute>
+          <Teachers />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/classes">
+        <ProtectedRoute>
+          <Classes />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/subjects">
+        <ProtectedRoute>
+          <Subjects />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/pin-requests">
+        <ProtectedRoute>
+          <PinRequests />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/users">
+        <ProtectedRoute>
+          <Users />
+        </ProtectedRoute>
+      </Route>
 
       {/* Fallback to 404 */}
       <Route component={NotFound} />

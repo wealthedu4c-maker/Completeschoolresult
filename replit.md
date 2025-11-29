@@ -1,0 +1,157 @@
+# SmartResultChecker - School Result Management System
+
+## Overview
+
+SmartResultChecker is a comprehensive web application for managing school results, students, and PIN-based result verification. The system supports multiple user roles (Super Admin, School Admin, Teacher) with role-specific dashboards and permissions. Built with a modern tech stack featuring React frontend, Express backend, and PostgreSQL database with Drizzle ORM.
+
+The application enables schools to digitize their result management workflow: teachers create and submit results, school admins approve them, and students check their results using secure one-time PINs. Super admins manage multiple schools from a central dashboard.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+
+**Framework & Build System**
+- React 18 with TypeScript for type safety
+- Vite as the build tool and development server
+- Wouter for lightweight client-side routing
+- TanStack Query (React Query) for server state management and caching
+
+**UI Component System**
+- Shadcn UI components built on Radix UI primitives
+- Tailwind CSS for utility-first styling with custom design tokens
+- Custom CSS variables for theme management (light/dark mode support)
+- Typography system using Inter (primary) and DM Sans (accent) fonts
+- Material Design principles with dashboard-focused patterns
+
+**State Management Strategy**
+- Local storage for authentication tokens and user session data
+- TanStack Query for all server data fetching, caching, and synchronization
+- React hooks (useState, useEffect) for local component state
+- No global state management library (Redux/Zustand) - server state handled by React Query
+
+**Routing & Navigation**
+- Public routes: Landing page, Login, Check Result (PIN-based)
+- Protected routes: Dashboard, Schools, Students, Results, PINs, Teachers, Classes, Subjects, PIN Requests, Users
+- Role-based access control with route guards checking localStorage user data
+- Dashboard layout wrapper for authenticated pages with sidebar navigation
+
+**Management Pages (Nov 2025)**
+- Teachers page: CRUD operations for teacher accounts with status toggle
+- Classes page: Create and delete class definitions with level/grade/arm structure
+- Subjects page: Create and delete subjects with categories (Core, Elective, Vocational)
+- PIN Requests page: School admins request PINs, Super admins approve/reject with reasons
+- Users page: Manage all user accounts with role filtering and status management
+
+### Backend Architecture
+
+**Server Framework**
+- Express.js with TypeScript for type-safe REST API
+- Custom middleware for request logging, authentication, and authorization
+- JWT-based authentication with 30-day token expiration
+- bcryptjs for password hashing
+
+**API Design Pattern**
+- RESTful conventions with resource-based endpoints
+- Authentication endpoints: `/api/auth/login`, `/api/auth/register`
+- Resource endpoints: `/api/schools`, `/api/students`, `/api/results`, `/api/pins`, `/api/users`, `/api/classes`, `/api/subjects`, `/api/pin-requests`
+- Action endpoints: `/api/pin-requests/:id/approve`, `/api/pin-requests/:id/reject`
+- Utility endpoints: `/api/analytics/dashboard` for dashboard statistics
+- Result calculation utilities for grading and GPA computation
+
+**Security Implementation**
+- Multi-tenant isolation: All queries filter by schoolId
+- School admins can only access/modify data for their own school
+- Class/subject deletion routes verify school ownership before proceeding
+- PIN request approval restricted to super_admin role only
+- User status updates verified against school ownership
+
+**Authentication & Authorization**
+- JWT tokens stored in localStorage (client-side)
+- `authenticate` middleware validates JWT on protected routes
+- `authorize` middleware checks user roles (super_admin, school_admin, teacher)
+- Password requirements and secure hashing with bcrypt (10 salt rounds)
+
+**Business Logic Components**
+- Result calculator: Computes totals, grades (A-F), and remarks from CA1, CA2, and exam scores
+- PIN generator: Creates unique alphanumeric PINs with expiry dates
+- Role-based data filtering: Users only see data for their assigned school (except super_admin)
+
+### Data Storage
+
+**Database Technology**
+- PostgreSQL via Neon serverless driver
+- WebSocket connection for serverless compatibility
+- Drizzle ORM for type-safe database queries and schema management
+- Database migrations managed through Drizzle Kit
+
+**Schema Design**
+- **users**: Multi-role user accounts (super_admin, school_admin, teacher) with email/password auth
+- **schools**: School profiles with metadata (name, code, address, logo, motto)
+- **students**: Student records linked to schools with admission numbers and class information
+- **results**: Academic results with draft→submitted→approved workflow and subject scores array
+- **pins**: One-time use PINs for result checking with expiry, usage tracking, and attempt limits
+- **pinRequests**: School admin requests for PINs, processed by super admin
+- **classes**: Class/grade definitions per academic year
+- **subjects**: Subject catalog per school
+- **teacherAssignments**: Maps teachers to subjects and classes
+- **auditLogs**: Activity tracking for compliance and debugging
+
+**Data Relationships**
+- Schools have many users, students, results, and PINs
+- Users belong to one school (except super_admin)
+- Students belong to one school, have many results
+- Results link student + school + session/term, contain subjects array
+- PINs are scoped to school + session + term
+- All entities track creator/updater via `createdBy` foreign keys
+
+**Indexing Strategy**
+- Email index on users table for login performance
+- Compound index on (schoolId, role) for user queries
+- School code unique index for lookup
+- Session/term indexes on results and PINs for filtering
+
+### External Dependencies
+
+**Third-Party UI Libraries**
+- @radix-ui/* components: Accessible, unstyled primitives (dialogs, dropdowns, tooltips, etc.)
+- lucide-react: Icon library for consistent iconography
+- tailwindcss: Utility-first CSS framework
+- class-variance-authority & clsx: Dynamic className composition
+
+**Development Tools**
+- TypeScript: Type safety across frontend and backend
+- tsx: TypeScript execution for development server
+- esbuild: Fast bundler for production backend builds
+- Vite plugins: React support, runtime error overlay, Replit-specific tooling
+
+**Backend Utilities**
+- @neondatabase/serverless: PostgreSQL driver optimized for serverless
+- jsonwebtoken: JWT creation and validation
+- bcryptjs: Password hashing
+- ws: WebSocket support for Neon database connection
+
+**Form & Validation**
+- @hookform/resolvers: React Hook Form integration
+- Zod (via drizzle-zod): Schema validation for database inserts
+- React Hook Form implied by resolver dependency
+
+**API Communication**
+- Native fetch API for HTTP requests
+- Custom apiRequest wrapper with authentication headers and error handling
+- TanStack Query for request deduplication and caching
+
+**Database ORM**
+- drizzle-orm: Type-safe query builder
+- drizzle-kit: Schema migrations and introspection
+- Connection pooling via @neondatabase/serverless Pool
+
+**Potential Future Integrations**
+- File upload service for school logos (currently stored as URLs)
+- PDF generation library for result sheets
+- Email service for notifications (password resets, result approvals)
+- SMS gateway for PIN delivery to parents
+- Analytics dashboard (Chart.js or Recharts for visualizations)
