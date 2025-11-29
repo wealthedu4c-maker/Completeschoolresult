@@ -46,6 +46,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
     { title: "Dashboard", url: "/dashboard", icon: Home },
     { title: "Schools", url: "/schools", icon: School },
     { title: "Users", url: "/users", icon: Users },
+    { title: "PINs", url: "/pins", icon: Key },
+    { title: "PIN Requests", url: "/pin-requests", icon: ClipboardList },
     { title: "Analytics", url: "/analytics", icon: BarChart3 },
   ];
 
