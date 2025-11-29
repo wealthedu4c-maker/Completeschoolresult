@@ -12,6 +12,8 @@ import {
   scoreMetrics,
   classSubjects,
   notifications,
+  resultSheets,
+  resultSheetEntries,
   type User, 
   type InsertUser,
   type School,
@@ -37,6 +39,10 @@ import {
   type InsertNotification,
   type TeacherAssignment,
   type InsertTeacherAssignment,
+  type ResultSheet,
+  type InsertResultSheet,
+  type ResultSheetEntry,
+  type InsertResultSheetEntry,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -135,6 +141,28 @@ export interface IStorage {
 
   // Analytics
   getDashboardStats(userId: string, role: string, schoolId?: string): Promise<any>;
+
+  // Result Sheets
+  getResultSheet(id: string): Promise<ResultSheet | undefined>;
+  createResultSheet(sheet: InsertResultSheet): Promise<ResultSheet>;
+  updateResultSheet(id: string, data: Partial<InsertResultSheet>): Promise<ResultSheet>;
+  listResultSheets(schoolId: string, filters?: { status?: string; classId?: string; subjectId?: string; session?: string; term?: string }): Promise<ResultSheet[]>;
+  deleteResultSheet(id: string): Promise<void>;
+  submitResultSheet(id: string, submittedBy: string): Promise<ResultSheet>;
+  approveResultSheet(id: string, approvedBy: string): Promise<ResultSheet>;
+  rejectResultSheet(id: string, approvedBy: string, reason: string): Promise<ResultSheet>;
+
+  // Result Sheet Entries
+  getResultSheetEntry(id: string): Promise<ResultSheetEntry | undefined>;
+  createResultSheetEntry(entry: InsertResultSheetEntry): Promise<ResultSheetEntry>;
+  createResultSheetEntries(entries: InsertResultSheetEntry[]): Promise<ResultSheetEntry[]>;
+  updateResultSheetEntry(id: string, data: Partial<InsertResultSheetEntry>): Promise<ResultSheetEntry>;
+  listResultSheetEntries(sheetId: string): Promise<ResultSheetEntry[]>;
+  deleteResultSheetEntry(id: string): Promise<void>;
+  deleteResultSheetEntriesBySheet(sheetId: string): Promise<void>;
+
+  // Aggregation
+  aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -606,6 +634,266 @@ export class DatabaseStorage implements IStorage {
     }));
     
     return await db.insert(teacherAssignments).values(newRecords).returning();
+  }
+
+  // Result Sheets
+  async getResultSheet(id: string): Promise<ResultSheet | undefined> {
+    const [sheet] = await db.select().from(resultSheets).where(eq(resultSheets.id, id));
+    return sheet || undefined;
+  }
+
+  async createResultSheet(sheet: InsertResultSheet): Promise<ResultSheet> {
+    const [record] = await db.insert(resultSheets).values(sheet).returning();
+    return record;
+  }
+
+  async updateResultSheet(id: string, data: Partial<InsertResultSheet>): Promise<ResultSheet> {
+    const [record] = await db.update(resultSheets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(resultSheets.id, id))
+      .returning();
+    return record;
+  }
+
+  async listResultSheets(schoolId: string, filters?: { status?: string; classId?: string; subjectId?: string; session?: string; term?: string }): Promise<ResultSheet[]> {
+    const conditions = [eq(resultSheets.schoolId, schoolId)];
+    
+    if (filters?.status) {
+      conditions.push(eq(resultSheets.status, filters.status));
+    }
+    if (filters?.classId) {
+      conditions.push(eq(resultSheets.classId, filters.classId));
+    }
+    if (filters?.subjectId) {
+      conditions.push(eq(resultSheets.subjectId, filters.subjectId));
+    }
+    if (filters?.session) {
+      conditions.push(eq(resultSheets.session, filters.session));
+    }
+    if (filters?.term) {
+      conditions.push(eq(resultSheets.term, filters.term));
+    }
+    
+    return await db.select().from(resultSheets)
+      .where(and(...conditions))
+      .orderBy(desc(resultSheets.createdAt));
+  }
+
+  async deleteResultSheet(id: string): Promise<void> {
+    await db.delete(resultSheetEntries).where(eq(resultSheetEntries.sheetId, id));
+    await db.delete(resultSheets).where(eq(resultSheets.id, id));
+  }
+
+  async submitResultSheet(id: string, submittedBy: string): Promise<ResultSheet> {
+    const [record] = await db.update(resultSheets)
+      .set({ 
+        status: "submitted", 
+        submittedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(resultSheets.id, id))
+      .returning();
+    return record;
+  }
+
+  async approveResultSheet(id: string, approvedBy: string): Promise<ResultSheet> {
+    const [record] = await db.update(resultSheets)
+      .set({ 
+        status: "approved", 
+        approvedBy,
+        approvedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(resultSheets.id, id))
+      .returning();
+    return record;
+  }
+
+  async rejectResultSheet(id: string, approvedBy: string, reason: string): Promise<ResultSheet> {
+    const [record] = await db.update(resultSheets)
+      .set({ 
+        status: "rejected",
+        approvedBy,
+        approvedAt: new Date(), 
+        rejectionReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(resultSheets.id, id))
+      .returning();
+    return record;
+  }
+
+  // Result Sheet Entries
+  async getResultSheetEntry(id: string): Promise<ResultSheetEntry | undefined> {
+    const [entry] = await db.select().from(resultSheetEntries).where(eq(resultSheetEntries.id, id));
+    return entry || undefined;
+  }
+
+  async createResultSheetEntry(entry: InsertResultSheetEntry): Promise<ResultSheetEntry> {
+    const [record] = await db.insert(resultSheetEntries).values(entry).returning();
+    return record;
+  }
+
+  async createResultSheetEntries(entries: InsertResultSheetEntry[]): Promise<ResultSheetEntry[]> {
+    if (entries.length === 0) return [];
+    return await db.insert(resultSheetEntries).values(entries).returning();
+  }
+
+  async updateResultSheetEntry(id: string, data: Partial<InsertResultSheetEntry>): Promise<ResultSheetEntry> {
+    const [record] = await db.update(resultSheetEntries)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(resultSheetEntries.id, id))
+      .returning();
+    return record;
+  }
+
+  async listResultSheetEntries(sheetId: string): Promise<ResultSheetEntry[]> {
+    return await db.select().from(resultSheetEntries)
+      .where(eq(resultSheetEntries.sheetId, sheetId));
+  }
+
+  async deleteResultSheetEntry(id: string): Promise<void> {
+    await db.delete(resultSheetEntries).where(eq(resultSheetEntries.id, id));
+  }
+
+  async deleteResultSheetEntriesBySheet(sheetId: string): Promise<void> {
+    await db.delete(resultSheetEntries).where(eq(resultSheetEntries.sheetId, sheetId));
+  }
+
+  // Aggregation - merges approved subject sheets into student results
+  async aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void> {
+    // Get all approved sheets for this school/session/term
+    const approvedSheets = await db.select()
+      .from(resultSheets)
+      .where(and(
+        eq(resultSheets.schoolId, schoolId),
+        eq(resultSheets.session, session),
+        eq(resultSheets.term, term),
+        eq(resultSheets.status, "approved")
+      ));
+
+    if (approvedSheets.length === 0) return;
+
+    // Get all entries for approved sheets
+    const sheetIds = approvedSheets.map(s => s.id);
+    const allEntries = await db.select()
+      .from(resultSheetEntries)
+      .where(inArray(resultSheetEntries.sheetId, sheetIds));
+
+    // Get subject info for sheet-to-subject mapping
+    const sheetSubjectMap = new Map<string, string>();
+    for (const sheet of approvedSheets) {
+      sheetSubjectMap.set(sheet.id, sheet.subjectId);
+    }
+
+    // Get class info for sheet-to-class mapping
+    const sheetClassMap = new Map<string, string>();
+    for (const sheet of approvedSheets) {
+      sheetClassMap.set(sheet.id, sheet.classId);
+    }
+
+    // Get all subjects for name lookup
+    const subjectList = await db.select().from(subjects).where(eq(subjects.schoolId, schoolId));
+    const subjectNameMap = new Map<string, string>();
+    for (const subj of subjectList) {
+      subjectNameMap.set(subj.id, subj.name);
+    }
+
+    // Get all classes for name lookup
+    const classList = await db.select().from(classes).where(eq(classes.schoolId, schoolId));
+    const classNameMap = new Map<string, string>();
+    for (const cls of classList) {
+      classNameMap.set(cls.id, cls.name);
+    }
+
+    // Group entries by student
+    const studentSubjects = new Map<string, Array<{
+      subject: string;
+      ca1: number;
+      ca2: number;
+      exam: number;
+      total: number;
+      grade: string | null;
+      remark: string | null;
+    }>>();
+    const studentClassMap = new Map<string, string>();
+
+    for (const entry of allEntries) {
+      const subjectId = sheetSubjectMap.get(entry.sheetId);
+      const classId = sheetClassMap.get(entry.sheetId);
+      if (!subjectId || !classId) continue;
+
+      const subjectName = subjectNameMap.get(subjectId) || "Unknown";
+      const className = classNameMap.get(classId) || "Unknown";
+      
+      studentClassMap.set(entry.studentId, className);
+      
+      if (!studentSubjects.has(entry.studentId)) {
+        studentSubjects.set(entry.studentId, []);
+      }
+      
+      studentSubjects.get(entry.studentId)!.push({
+        subject: subjectName,
+        ca1: parseFloat(entry.ca1) || 0,
+        ca2: parseFloat(entry.ca2) || 0,
+        exam: parseFloat(entry.exam) || 0,
+        total: parseFloat(entry.total) || 0,
+        grade: entry.grade,
+        remark: entry.remark,
+      });
+    }
+
+    // For each student, create or update their aggregated result
+    const studentIds = Array.from(studentSubjects.keys());
+    for (const studentId of studentIds) {
+      const subjectScores = studentSubjects.get(studentId)!;
+      const className = studentClassMap.get(studentId) || "";
+      
+      // Calculate overall totals
+      const totalScore = subjectScores.reduce((sum: number, s: { total: number }) => sum + s.total, 0);
+      const averageScore = subjectScores.length > 0 ? totalScore / subjectScores.length : 0;
+      
+      // Check if result exists
+      const existingResult = await this.getResultByStudentSessionTerm(studentId, session, term);
+      
+      if (existingResult) {
+        // Update existing result with new subjects array
+        await db.update(results)
+          .set({
+            subjects: subjectScores,
+            totalScore: totalScore.toFixed(2),
+            averageScore: averageScore.toFixed(2),
+            status: "approved",
+            updatedAt: new Date(),
+          })
+          .where(eq(results.id, existingResult.id));
+      } else {
+        // Get student for school linkage
+        const student = await this.getStudent(studentId);
+        if (!student) continue;
+        
+        // Create new aggregated result
+        await db.insert(results).values({
+          schoolId,
+          studentId,
+          session,
+          term: term as "First" | "Second" | "Third",
+          class: className,
+          subjects: subjectScores,
+          totalScore: totalScore.toFixed(2),
+          averageScore: averageScore.toFixed(2),
+          status: "approved",
+          uploadedBy: approvedSheets[0].submittedBy,
+        });
+      }
+    }
+
+    // Mark approved sheets as published
+    for (const sheet of approvedSheets) {
+      await db.update(resultSheets)
+        .set({ status: "published", updatedAt: new Date() })
+        .where(eq(resultSheets.id, sheet.id));
+    }
   }
 }
 
