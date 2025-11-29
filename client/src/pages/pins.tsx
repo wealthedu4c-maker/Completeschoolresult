@@ -99,25 +99,25 @@ export default function Pins() {
   const availablePins = (pins?.length || 0) - exhaustedPins;
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Result PINs</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Result PINs</h2>
+          <p className="text-sm md:text-base text-muted-foreground">
             {isSuperAdmin 
               ? "Manage result checker PINs" 
               : "View your school's result PINs (request new PINs from the PIN Requests page)"}
           </p>
         </div>
         {isSuperAdmin && (
-          <Button onClick={() => setDialogOpen(true)} data-testid="button-generate-pins">
+          <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto" data-testid="button-generate-pins">
             <Plus className="w-4 h-4 mr-2" />
             Generate PINs
           </Button>
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total PINs</CardTitle>
@@ -158,19 +158,19 @@ export default function Pins() {
         </Card>
       </div>
 
-      <Card className="p-4">
+      <Card className="p-3 md:p-4">
         <div className="flex items-center gap-2 mb-4">
-          <Search className="w-4 h-4 text-muted-foreground" />
+          <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <Input
             placeholder="Search PINs..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-sm"
+            className="w-full sm:max-w-sm"
             data-testid="input-search"
           />
         </div>
 
-        <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
           {isLoading ? (
             <div className="col-span-full text-center py-8 text-muted-foreground">
               Loading PINs...
@@ -219,14 +219,14 @@ export default function Pins() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md mx-4 sm:mx-auto max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Generate PINs</DialogTitle>
             <DialogDescription>
               Create new result checker PINs for students
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 pb-2">
             {isSuperAdmin && (
               <div className="space-y-2">
                 <Label htmlFor="school">School</Label>
@@ -245,56 +245,61 @@ export default function Pins() {
               </div>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                max="1000"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                data-testid="input-quantity"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  data-testid="input-quantity"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="maxUsageCount">Max Uses</Label>
+                <Input
+                  id="maxUsageCount"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={maxUsageCount}
+                  onChange={(e) => setMaxUsageCount(e.target.value)}
+                  data-testid="input-max-usage"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="session">Session</Label>
-              <Input
-                id="session"
-                placeholder="2023/2024"
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                data-testid="input-session"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="session">Session</Label>
+                <Input
+                  id="session"
+                  placeholder="2023/2024"
+                  value={session}
+                  onChange={(e) => setSession(e.target.value)}
+                  data-testid="input-session"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="term">Term</Label>
+                <Input
+                  id="term"
+                  placeholder="First, Second..."
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                  data-testid="input-term"
+                />
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="term">Term</Label>
-              <Input
-                id="term"
-                placeholder="First, Second, Third"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                data-testid="input-term"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="maxUsageCount">Max Usage Count</Label>
-              <Input
-                id="maxUsageCount"
-                type="number"
-                min="1"
-                max="100"
-                value={maxUsageCount}
-                onChange={(e) => setMaxUsageCount(e.target.value)}
-                data-testid="input-max-usage"
-              />
-              <p className="text-xs text-muted-foreground">
-                How many times each PIN can be used (default: 1 for single-use)
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Max Uses: How many times each PIN can be used (default: 1 for single-use)
+            </p>
 
             <Button
               onClick={handleGenerate}
