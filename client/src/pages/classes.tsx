@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -42,18 +41,21 @@ interface ClassRecord {
   createdAt: string;
 }
 
+const defaultFormData = {
+  name: "",
+  level: "Primary",
+  grade: 1,
+  arm: "",
+  academicYear: new Date().getFullYear() + "/" + (new Date().getFullYear() + 1),
+  capacity: 40,
+};
+
 export default function Classes() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    level: "Primary",
-    grade: 1,
-    arm: "",
-    academicYear: new Date().getFullYear() + "/" + (new Date().getFullYear() + 1),
-    capacity: 40,
-  });
+  const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
+  const [formData, setFormData] = useState(defaultFormData);
 
   const { data: classes = [], isLoading } = useQuery<ClassRecord[]>({
     queryKey: ["/api/classes"],
@@ -66,16 +68,23 @@ export default function Classes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/classes"] });
-      setIsDialogOpen(false);
-      setFormData({
-        name: "",
-        level: "Primary",
-        grade: 1,
-        arm: "",
-        academicYear: new Date().getFullYear() + "/" + (new Date().getFullYear() + 1),
-        capacity: 40,
-      });
+      closeDialog();
       toast({ title: "Success", description: "Class created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof formData }) => {
+      const res = await apiRequest("PATCH", `/api/classes/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/classes"] });
+      closeDialog();
+      toast({ title: "Success", description: "Class updated successfully" });
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "Error", description: error.message });
@@ -101,9 +110,32 @@ export default function Classes() {
       c.level.toLowerCase().includes(search.toLowerCase())
   );
 
+  const closeDialog = () => {
+    setIsDialogOpen(false);
+    setEditingClass(null);
+    setFormData(defaultFormData);
+  };
+
+  const openEditDialog = (classRecord: ClassRecord) => {
+    setEditingClass(classRecord);
+    setFormData({
+      name: classRecord.name,
+      level: classRecord.level,
+      grade: classRecord.grade,
+      arm: classRecord.arm || "",
+      academicYear: classRecord.academicYear,
+      capacity: classRecord.capacity || 40,
+    });
+    setIsDialogOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    if (editingClass) {
+      updateMutation.mutate({ id: editingClass.id, data: formData });
+    } else {
+      createMutation.mutate(formData);
+    }
   };
 
   const getLevelColor = (level: string) => {
@@ -119,6 +151,8 @@ export default function Classes() {
     }
   };
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -126,109 +160,114 @@ export default function Classes() {
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Classes</h2>
           <p className="text-muted-foreground">Manage your school's class structure</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 w-full sm:w-auto" data-testid="button-add-class">
-              <Plus className="w-4 h-4" />
-              Add Class
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md mx-4 sm:mx-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Class</DialogTitle>
-              <DialogDescription>Create a new class for your school</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Class Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Primary 1, JSS 2A"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  data-testid="input-name"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="level">Level</Label>
-                  <Select
-                    value={formData.level}
-                    onValueChange={(value) => setFormData({ ...formData, level: value })}
-                  >
-                    <SelectTrigger data-testid="select-level">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Primary">Primary</SelectItem>
-                      <SelectItem value="JSS">JSS</SelectItem>
-                      <SelectItem value="SS">SS</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="grade">Grade</Label>
-                  <Select
-                    value={String(formData.grade)}
-                    onValueChange={(value) => setFormData({ ...formData, grade: Number(value) })}
-                  >
-                    <SelectTrigger data-testid="select-grade">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6].map((g) => (
-                        <SelectItem key={g} value={String(g)}>
-                          {g}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="arm">Arm (Optional)</Label>
-                  <Input
-                    id="arm"
-                    placeholder="e.g., A, B, C"
-                    value={formData.arm}
-                    onChange={(e) => setFormData({ ...formData, arm: e.target.value.toUpperCase() })}
-                    maxLength={1}
-                    data-testid="input-arm"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="capacity">Capacity</Label>
-                  <Input
-                    id="capacity"
-                    type="number"
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                    min={1}
-                    data-testid="input-capacity"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="academicYear">Academic Year</Label>
-                <Input
-                  id="academicYear"
-                  placeholder="e.g., 2024/2025"
-                  value={formData.academicYear}
-                  onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                  required
-                  data-testid="input-academic-year"
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit">
-                {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Create Class
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button 
+          className="gap-2 w-full sm:w-auto" 
+          onClick={() => setIsDialogOpen(true)}
+          data-testid="button-add-class"
+        >
+          <Plus className="w-4 h-4" />
+          Add Class
+        </Button>
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>{editingClass ? "Edit Class" : "Add New Class"}</DialogTitle>
+            <DialogDescription>
+              {editingClass ? "Update class details" : "Create a new class for your school"}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Class Name</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Primary 1, JSS 2A"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                data-testid="input-name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="level">Level</Label>
+                <Select
+                  value={formData.level}
+                  onValueChange={(value) => setFormData({ ...formData, level: value })}
+                >
+                  <SelectTrigger data-testid="select-level">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Primary">Primary</SelectItem>
+                    <SelectItem value="JSS">JSS</SelectItem>
+                    <SelectItem value="SS">SS</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="grade">Grade</Label>
+                <Select
+                  value={String(formData.grade)}
+                  onValueChange={(value) => setFormData({ ...formData, grade: Number(value) })}
+                >
+                  <SelectTrigger data-testid="select-grade">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((g) => (
+                      <SelectItem key={g} value={String(g)}>
+                        {g}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="arm">Arm (Optional)</Label>
+                <Input
+                  id="arm"
+                  placeholder="e.g., A, B, C"
+                  value={formData.arm}
+                  onChange={(e) => setFormData({ ...formData, arm: e.target.value.toUpperCase() })}
+                  maxLength={1}
+                  data-testid="input-arm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="capacity">Capacity</Label>
+                <Input
+                  id="capacity"
+                  type="number"
+                  value={formData.capacity}
+                  onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+                  min={1}
+                  data-testid="input-capacity"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="academicYear">Academic Year</Label>
+              <Input
+                id="academicYear"
+                placeholder="e.g., 2024/2025"
+                value={formData.academicYear}
+                onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                required
+                data-testid="input-academic-year"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isPending} data-testid="button-submit">
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {editingClass ? "Update Class" : "Create Class"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="pb-4">
@@ -285,15 +324,25 @@ export default function Classes() {
                       <TableCell className="hidden md:table-cell">{classRecord.academicYear}</TableCell>
                       <TableCell className="hidden lg:table-cell">{classRecord.capacity || "-"}</TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => deleteMutation.mutate(classRecord.id)}
-                          disabled={deleteMutation.isPending}
-                          data-testid={`button-delete-${classRecord.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openEditDialog(classRecord)}
+                            data-testid={`button-edit-${classRecord.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteMutation.mutate(classRecord.id)}
+                            disabled={deleteMutation.isPending}
+                            data-testid={`button-delete-${classRecord.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

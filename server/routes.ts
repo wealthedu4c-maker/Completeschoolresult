@@ -595,6 +595,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/classes/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const classRecord = await storage.getClass(req.params.id);
+      if (!classRecord) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+      if (classRecord.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update classes from other schools" });
+      }
+      const updated = await storage.updateClass(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/classes/:id", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
     try {
       // Verify class belongs to user's school for school admins
@@ -637,6 +653,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdBy: req.user!.id,
       });
       res.status(201).json(subject);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/subjects/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const subject = await storage.getSubject(req.params.id);
+      if (!subject) {
+        return res.status(404).json({ message: "Subject not found" });
+      }
+      if (subject.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update subjects from other schools" });
+      }
+      const updated = await storage.updateSubject(req.params.id, req.body);
+      res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }

@@ -82,12 +82,14 @@ export interface IStorage {
   // Classes
   getClass(id: string): Promise<Class | undefined>;
   createClass(classData: InsertClass): Promise<Class>;
+  updateClass(id: string, data: Partial<InsertClass>): Promise<Class>;
   listClasses(schoolId: string): Promise<Class[]>;
   deleteClass(id: string, schoolId?: string): Promise<void>;
 
   // Subjects
   getSubject(id: string): Promise<Subject | undefined>;
   createSubject(subject: InsertSubject): Promise<Subject>;
+  updateSubject(id: string, data: Partial<InsertSubject>): Promise<Subject>;
   listSubjects(schoolId: string): Promise<Subject[]>;
   deleteSubject(id: string, schoolId?: string): Promise<void>;
 
@@ -334,6 +336,14 @@ export class DatabaseStorage implements IStorage {
     return classRecord;
   }
 
+  async updateClass(id: string, data: Partial<InsertClass>): Promise<Class> {
+    const [classRecord] = await db.update(classes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(classes.id, id))
+      .returning();
+    return classRecord;
+  }
+
   async listClasses(schoolId: string): Promise<Class[]> {
     return await db.select().from(classes).where(eq(classes.schoolId, schoolId));
   }
@@ -354,6 +364,14 @@ export class DatabaseStorage implements IStorage {
 
   async createSubject(subject: InsertSubject): Promise<Subject> {
     const [subjectRecord] = await db.insert(subjects).values(subject).returning();
+    return subjectRecord;
+  }
+
+  async updateSubject(id: string, data: Partial<InsertSubject>): Promise<Subject> {
+    const [subjectRecord] = await db.update(subjects)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(subjects.id, id))
+      .returning();
     return subjectRecord;
   }
 
