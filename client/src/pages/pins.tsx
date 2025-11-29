@@ -25,6 +25,9 @@ export default function Pins() {
   const [session, setSession] = useState("");
   const [term, setTerm] = useState("First");
 
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isSuperAdmin = user.role === "super_admin";
+
   const { data: pins, isLoading } = useQuery<PIN[]>({
     queryKey: ["/api/pins"],
   });
@@ -71,12 +74,18 @@ export default function Pins() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Result PINs</h2>
-          <p className="text-muted-foreground">Manage result checker PINs</p>
+          <p className="text-muted-foreground">
+            {isSuperAdmin 
+              ? "Manage result checker PINs" 
+              : "View your school's result PINs (request new PINs from the PIN Requests page)"}
+          </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-generate-pins">
-          <Plus className="w-4 h-4 mr-2" />
-          Generate PINs
-        </Button>
+        {isSuperAdmin && (
+          <Button onClick={() => setDialogOpen(true)} data-testid="button-generate-pins">
+            <Plus className="w-4 h-4 mr-2" />
+            Generate PINs
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
