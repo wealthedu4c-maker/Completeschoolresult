@@ -79,6 +79,13 @@ Preferred communication style: Simple, everyday language.
 - Published result protection: Results with "published" status cannot be modified or commented on (enforced at API layer)
 - PIN request notifications: Super admins automatically notified when school admins request PINs
 
+**Super Admin Features (Nov 2025)**
+- School Activation/Deactivation: Toggle school status from the Schools management page
+- Direct PIN Generation: Super admins can generate PINs for any school with configurable usage limits
+- Multi-use PINs: Support for PINs that can be used multiple times (maxUsageCount, usageCount tracking)
+- PIN Request Approval with Limits: Set max usage count when approving PIN requests
+- PIN Statistics: Dashboard shows Available vs Exhausted PINs based on remaining usage capacity
+
 ### Backend Architecture
 
 **Server Framework**
