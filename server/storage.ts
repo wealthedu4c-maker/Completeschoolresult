@@ -20,7 +20,7 @@ import {
   type PIN,
   type InsertPIN,
   type PINRequest,
-  type InsertPINRequest,
+  type CreatePINRequest,
   type Class,
   type InsertClass,
   type Subject,
@@ -75,7 +75,7 @@ export interface IStorage {
 
   // PIN Requests
   getPinRequest(id: string): Promise<PINRequest | undefined>;
-  createPinRequest(request: InsertPINRequest): Promise<PINRequest>;
+  createPinRequest(request: CreatePINRequest): Promise<PINRequest>;
   listPinRequests(schoolId?: string): Promise<PINRequest[]>;
   updatePinRequest(id: string, data: Partial<any>): Promise<PINRequest>;
 
@@ -303,7 +303,7 @@ export class DatabaseStorage implements IStorage {
     return request || undefined;
   }
 
-  async createPinRequest(request: InsertPINRequest): Promise<PINRequest> {
+  async createPinRequest(request: CreatePINRequest): Promise<PINRequest> {
     const [pinRequest] = await db.insert(pinRequests).values(request).returning();
     return pinRequest;
   }

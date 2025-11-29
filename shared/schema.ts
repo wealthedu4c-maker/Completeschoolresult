@@ -359,7 +359,18 @@ export const insertPinRequestSchema = createInsertSchema(pinRequests, {
   quantity: z.number().min(1).max(1000),
   session: z.string().min(1),
   term: z.enum(["First", "Second", "Third"]),
-}).omit({ id: true, createdAt: true, updatedAt: true });
+}).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  schoolId: true,
+  requestedBy: true,
+  processedBy: true,
+  processedAt: true,
+  rejectionReason: true,
+  generatedPinIds: true,
+  status: true,
+});
 
 export const insertClassSchema = createInsertSchema(classes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true, createdAt: true, updatedAt: true });
@@ -379,6 +390,13 @@ export type PIN = typeof pins.$inferSelect;
 export type InsertPIN = z.infer<typeof insertPinSchema>;
 export type PINRequest = typeof pinRequests.$inferSelect;
 export type InsertPINRequest = z.infer<typeof insertPinRequestSchema>;
+export type CreatePINRequest = {
+  schoolId: string;
+  requestedBy: string;
+  session: string;
+  term: string;
+  quantity: number;
+};
 export type Class = typeof classes.$inferSelect;
 export type InsertClass = z.infer<typeof insertClassSchema>;
 export type Subject = typeof subjects.$inferSelect;

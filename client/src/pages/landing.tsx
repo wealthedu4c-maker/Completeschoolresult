@@ -9,7 +9,8 @@ import {
   FileText, 
   Key, 
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  UserPlus
 } from "lucide-react";
 
 export default function Landing() {
@@ -28,10 +29,15 @@ export default function Landing() {
                 </div>
                 <span className="text-xl font-bold">SmartResultChecker</span>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <Link href="/check-result">
                   <Button variant="ghost" size="sm" data-testid="link-check-result">
                     Check Result
+                  </Button>
+                </Link>
+                <Link href="/register">
+                  <Button variant="outline" size="sm" data-testid="link-register">
+                    Sign Up
                   </Button>
                 </Link>
                 <Link href="/login">
@@ -53,16 +59,22 @@ export default function Landing() {
                 Modern result management system with secure PIN-based result checking. 
                 Perfect for schools looking to digitize their result workflow.
               </p>
-              <div className="flex items-center justify-center gap-4">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/check-result">
-                  <Button size="lg" className="gap-2" data-testid="button-check-result-hero">
+                  <Button size="lg" className="gap-2 w-full sm:w-auto" data-testid="button-check-result-hero">
                     <Key className="w-5 h-5" />
                     Check Your Result
                   </Button>
                 </Link>
+                <Link href="/register">
+                  <Button size="lg" variant="outline" className="gap-2 w-full sm:w-auto" data-testid="button-register-hero">
+                    <UserPlus className="w-5 h-5" />
+                    Register Your School
+                  </Button>
+                </Link>
                 <Link href="/login">
-                  <Button size="lg" variant="outline" className="gap-2" data-testid="button-login-hero">
-                    Login as Admin
+                  <Button size="lg" variant="ghost" className="gap-2 w-full sm:w-auto" data-testid="button-login-hero">
+                    Login
                     <ArrowRight className="w-5 h-5" />
                   </Button>
                 </Link>
@@ -152,11 +164,19 @@ export default function Landing() {
             <p className="text-lg text-muted-foreground mb-8">
               Transform your school result management today
             </p>
-            <Link href="/check-result">
-              <Button size="lg" data-testid="button-check-result-cta">
-                Check Your Result Now
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href="/register">
+                <Button size="lg" className="gap-2" data-testid="button-register-cta">
+                  <UserPlus className="w-5 h-5" />
+                  Register Your School
+                </Button>
+              </Link>
+              <Link href="/check-result">
+                <Button size="lg" variant="outline" data-testid="button-check-result-cta">
+                  Check Your Result
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
