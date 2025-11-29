@@ -394,6 +394,77 @@ export const auditLogs = pgTable("audit_logs", {
   createdIdx: index("audit_logs_created_idx").on(table.createdAt),
 }));
 
+// ===== RESULT SHEETS TABLE =====
+// Represents a class+subject submission by a teacher (e.g., "Mathematics for SS1 Gold")
+export const resultSheets = pgTable("result_sheets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: uuid("school_id").notNull(),
+  classId: uuid("class_id").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  session: varchar("session", { length: 20 }).notNull(), // e.g., "2024/2025"
+  term: varchar("term", { length: 20 }).notNull(), // 'First', 'Second', 'Third'
+  status: varchar("status", { length: 20 }).default("draft").notNull(), // 'draft', 'submitted', 'approved', 'rejected'
+  submittedBy: uuid("submitted_by").notNull(), // Teacher who created/submitted
+  submittedAt: timestamp("submitted_at"),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  schoolClassSubjectIdx: index("result_sheets_school_class_subject_idx").on(table.schoolId, table.classId, table.subjectId, table.session, table.term),
+  statusIdx: index("result_sheets_status_idx").on(table.schoolId, table.status),
+}));
+
+export const resultSheetsRelations = relations(resultSheets, ({ one, many }) => ({
+  school: one(schools, {
+    fields: [resultSheets.schoolId],
+    references: [schools.id],
+  }),
+  class: one(classes, {
+    fields: [resultSheets.classId],
+    references: [classes.id],
+  }),
+  subject: one(subjects, {
+    fields: [resultSheets.subjectId],
+    references: [subjects.id],
+  }),
+  submitter: one(users, {
+    fields: [resultSheets.submittedBy],
+    references: [users.id],
+  }),
+  entries: many(resultSheetEntries),
+}));
+
+// ===== RESULT SHEET ENTRIES TABLE =====
+// Individual student scores within a result sheet
+export const resultSheetEntries = pgTable("result_sheet_entries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sheetId: uuid("sheet_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  ca1: decimal("ca1", { precision: 5, scale: 2 }).default("0").notNull(),
+  ca2: decimal("ca2", { precision: 5, scale: 2 }).default("0").notNull(),
+  exam: decimal("exam", { precision: 5, scale: 2 }).default("0").notNull(),
+  total: decimal("total", { precision: 5, scale: 2 }).default("0").notNull(),
+  grade: varchar("grade", { length: 5 }),
+  remark: varchar("remark", { length: 50 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  sheetStudentIdx: index("result_sheet_entries_sheet_student_idx").on(table.sheetId, table.studentId),
+}));
+
+export const resultSheetEntriesRelations = relations(resultSheetEntries, ({ one }) => ({
+  sheet: one(resultSheets, {
+    fields: [resultSheetEntries.sheetId],
+    references: [resultSheets.id],
+  }),
+  student: one(students, {
+    fields: [resultSheetEntries.studentId],
+    references: [students.id],
+  }),
+}));
+
 // ===== INSERT SCHEMAS =====
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email(),
@@ -461,6 +532,18 @@ export const insertScoreMetricSchema = createInsertSchema(scoreMetrics).omit({ i
 export const insertClassSubjectSchema = createInsertSchema(classSubjects).omit({ id: true, createdAt: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 
+export const insertResultSheetSchema = createInsertSchema(resultSheets, {
+  session: z.string().min(1),
+  term: z.enum(["First", "Second", "Third"]),
+}).omit({ id: true, createdAt: true, updatedAt: true, approvedBy: true, approvedAt: true, rejectionReason: true, submittedAt: true });
+
+export const insertResultSheetEntrySchema = createInsertSchema(resultSheetEntries, {
+  ca1: z.union([z.string(), z.number()]).transform(v => String(v)),
+  ca2: z.union([z.string(), z.number()]).transform(v => String(v)),
+  exam: z.union([z.string(), z.number()]).transform(v => String(v)),
+  total: z.union([z.string(), z.number()]).transform(v => String(v)),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
 // ===== TYPES =====
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -495,3 +578,7 @@ export type ClassSubject = typeof classSubjects.$inferSelect;
 export type InsertClassSubject = z.infer<typeof insertClassSubjectSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type ResultSheet = typeof resultSheets.$inferSelect;
+export type InsertResultSheet = z.infer<typeof insertResultSheetSchema>;
+export type ResultSheetEntry = typeof resultSheetEntries.$inferSelect;
+export type InsertResultSheetEntry = z.infer<typeof insertResultSheetEntrySchema>;
