@@ -127,6 +127,11 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
     return students.filter((s) => s.class === selectedClass.name);
   }, [selectedClassId, students, classes]);
 
+  const filteredStudentIds = useMemo(() => 
+    filteredStudents.map(s => s.id).join(","),
+    [filteredStudents]
+  );
+
   useEffect(() => {
     if (selectedClassId && selectedSubjectId && filteredStudents.length > 0) {
       setStudentScores(
@@ -142,7 +147,7 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
     } else {
       setStudentScores([]);
     }
-  }, [selectedClassId, selectedSubjectId, filteredStudents]);
+  }, [selectedClassId, selectedSubjectId, filteredStudentIds]);
 
   const getMaxScore = (field: "ca1" | "ca2" | "exam") => {
     const metric = scoreMetrics.find(m => 
