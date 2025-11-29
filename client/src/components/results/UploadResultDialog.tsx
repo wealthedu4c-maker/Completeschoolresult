@@ -253,12 +253,12 @@ export function UploadResultDialog({ open, onOpenChange }: UploadResultDialogPro
 
             <div className="space-y-2">
               <Label>Class (Filter)</Label>
-              <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <Select value={selectedClass || "all"} onValueChange={(value) => setSelectedClass(value === "all" ? "" : value)}>
                 <SelectTrigger data-testid="select-result-class">
                   <SelectValue placeholder="All classes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Classes</SelectItem>
+                  <SelectItem value="all">All Classes</SelectItem>
                   {classes.map((c) => (
                     <SelectItem key={c.id} value={c.name}>
                       {c.name}
