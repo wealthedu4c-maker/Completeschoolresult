@@ -34,7 +34,7 @@ Preferred communication style: Simple, everyday language.
 - No global state management library (Redux/Zustand) - server state handled by React Query
 
 **Routing & Navigation**
-- Public routes: Landing page, Login, Check Result (PIN-based)
+- Public routes: Landing page, Login, Register (school registration), Check Result (PIN-based)
 - Protected routes: Dashboard, Schools, Students, Results, PINs, Teachers, Classes, Subjects, PIN Requests, Users
 - Role-based access control with route guards checking localStorage user data
 - Dashboard layout wrapper for authenticated pages with sidebar navigation
@@ -45,6 +45,17 @@ Preferred communication style: Simple, everyday language.
 - Subjects page: Create and delete subjects with categories (Core, Elective, Vocational)
 - PIN Requests page: School admins request PINs, Super admins approve/reject with reasons
 - Users page: Manage all user accounts with role filtering and status management
+
+**Bulk Upload Features (Nov 2025)**
+- Student Bulk Upload: CSV file upload with template download, validates and imports multiple students
+- Result Bulk Upload: CSV file upload with subject scores, auto-calculates grades and totals
+- Components: BulkUploadDialog (students), BulkResultUploadDialog (results)
+
+**Public School Registration (Nov 2025)**
+- Two-step registration: Step 1 (School info) → Step 2 (Admin account)
+- Creates school with isActive: false (requires super admin approval)
+- Creates school_admin user linked to the school
+- Route: /register
 
 ### Backend Architecture
 
@@ -60,6 +71,8 @@ Preferred communication style: Simple, everyday language.
 - Resource endpoints: `/api/schools`, `/api/students`, `/api/results`, `/api/pins`, `/api/users`, `/api/classes`, `/api/subjects`, `/api/pin-requests`
 - Action endpoints: `/api/pin-requests/:id/approve`, `/api/pin-requests/:id/reject`
 - Utility endpoints: `/api/analytics/dashboard` for dashboard statistics
+- Public endpoints: `/api/public/check-result` (PIN-based result lookup), `/api/public/register-school` (school registration)
+- Bulk upload endpoints: `/api/students/bulk`, `/api/results/bulk`
 - Result calculation utilities for grading and GPA computation
 
 **Security Implementation**

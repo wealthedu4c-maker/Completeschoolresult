@@ -122,12 +122,20 @@ export default function Login() {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t text-center">
+            <div className="mt-6 pt-6 border-t space-y-3 text-center">
               <p className="text-sm text-muted-foreground">
                 Need to check your result?{" "}
                 <Link href="/check-result">
                   <span className="text-primary hover:underline cursor-pointer" data-testid="link-check-result">
                     Use a PIN
+                  </span>
+                </Link>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Want to register your school?{" "}
+                <Link href="/register">
+                  <span className="text-primary hover:underline cursor-pointer" data-testid="link-register">
+                    Register here
                   </span>
                 </Link>
               </p>

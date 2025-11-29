@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 // Public Pages
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import CheckResult from "@/pages/check-result";
 import NotFound from "@/pages/not-found";
 
@@ -77,6 +78,7 @@ function Router() {
       {/* Public Routes */}
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/check-result" component={CheckResult} />
 
       {/* Protected Dashboard Routes */}

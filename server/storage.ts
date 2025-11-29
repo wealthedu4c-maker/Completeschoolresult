@@ -28,7 +28,7 @@ import {
   type InsertAuditLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -49,14 +49,18 @@ export interface IStorage {
 
   // Students
   getStudent(id: string): Promise<Student | undefined>;
+  getStudentByAdmissionNumber(admissionNumber: string, schoolId: string): Promise<Student | undefined>;
   createStudent(student: InsertStudent): Promise<Student>;
+  createStudents(students: InsertStudent[]): Promise<Student[]>;
   updateStudent(id: string, data: Partial<InsertStudent>): Promise<Student>;
   listStudents(schoolId: string): Promise<Student[]>;
   deleteStudent(id: string): Promise<void>;
 
   // Results
   getResult(id: string): Promise<Result | undefined>;
+  getResultByStudentSessionTerm(studentId: string, session: string, term: string): Promise<Result | undefined>;
   createResult(result: InsertResult): Promise<Result>;
+  createResults(results: InsertResult[]): Promise<Result[]>;
   updateResult(id: string, data: Partial<InsertResult>): Promise<Result>;
   listResults(schoolId: string, filters?: { status?: string; session?: string; term?: string }): Promise<Result[]>;
   deleteResult(id: string): Promise<void>;
@@ -168,9 +172,20 @@ export class DatabaseStorage implements IStorage {
     return student || undefined;
   }
 
+  async getStudentByAdmissionNumber(admissionNumber: string, schoolId: string): Promise<Student | undefined> {
+    const [student] = await db.select().from(students)
+      .where(and(eq(students.admissionNumber, admissionNumber), eq(students.schoolId, schoolId)));
+    return student || undefined;
+  }
+
   async createStudent(insertStudent: InsertStudent): Promise<Student> {
     const [student] = await db.insert(students).values(insertStudent).returning();
     return student;
+  }
+
+  async createStudents(insertStudents: InsertStudent[]): Promise<Student[]> {
+    if (insertStudents.length === 0) return [];
+    return await db.insert(students).values(insertStudents).returning();
   }
 
   async updateStudent(id: string, data: Partial<InsertStudent>): Promise<Student> {
@@ -197,9 +212,24 @@ export class DatabaseStorage implements IStorage {
     return result || undefined;
   }
 
+  async getResultByStudentSessionTerm(studentId: string, session: string, term: string): Promise<Result | undefined> {
+    const [result] = await db.select().from(results)
+      .where(and(
+        eq(results.studentId, studentId),
+        eq(results.session, session),
+        eq(results.term, term)
+      ));
+    return result || undefined;
+  }
+
   async createResult(insertResult: InsertResult): Promise<Result> {
     const [result] = await db.insert(results).values(insertResult).returning();
     return result;
+  }
+
+  async createResults(insertResults: InsertResult[]): Promise<Result[]> {
+    if (insertResults.length === 0) return [];
+    return await db.insert(results).values(insertResults).returning();
   }
 
   async updateResult(id: string, data: Partial<InsertResult>): Promise<Result> {

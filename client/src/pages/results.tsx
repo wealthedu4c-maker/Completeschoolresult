@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Eye, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Search, Eye, CheckCircle, XCircle, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,9 +15,11 @@ import {
 import { useState } from "react";
 import type { Result } from "@shared/schema";
 import { Link } from "wouter";
+import { BulkResultUploadDialog } from "@/components/results/BulkResultUploadDialog";
 
 export default function Results() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
   const { data: results, isLoading } = useQuery<Result[]>({
     queryKey: ["/api/results"],
@@ -56,10 +58,21 @@ export default function Results() {
           </p>
         </div>
         {isTeacher && (
-          <Button data-testid="button-upload-result">
-            <Plus className="w-4 h-4 mr-2" />
-            Upload Result
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => setBulkUploadOpen(true)}
+              data-testid="button-bulk-upload"
+            >
+              <Upload className="w-4 h-4" />
+              Bulk Upload
+            </Button>
+            <Button data-testid="button-upload-result">
+              <Plus className="w-4 h-4 mr-2" />
+              Upload Result
+            </Button>
+          </div>
         )}
       </div>
 
@@ -156,6 +169,8 @@ export default function Results() {
           </Table>
         </div>
       </Card>
+
+      <BulkResultUploadDialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen} />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { StudentForm } from "@/components/students/StudentForm";
+import { BulkUploadDialog } from "@/components/students/BulkUploadDialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Student } from "@shared/schema";
@@ -29,6 +30,7 @@ export default function Students() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   const { data: students, isLoading } = useQuery<Student[]>({
@@ -102,7 +104,12 @@ export default function Students() {
           <p className="text-muted-foreground">Manage student records</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2" data-testid="button-bulk-upload">
+          <Button 
+            variant="outline" 
+            className="gap-2" 
+            onClick={() => setBulkUploadOpen(true)}
+            data-testid="button-bulk-upload"
+          >
             <Upload className="w-4 h-4" />
             Bulk Upload
           </Button>
@@ -228,6 +235,8 @@ export default function Students() {
           />
         </DialogContent>
       </Dialog>
+
+      <BulkUploadDialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen} />
     </div>
   );
 }

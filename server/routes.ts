@@ -6,6 +6,7 @@ import { calculateResults, generatePIN } from "./utils/result-calculator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema } from "@shared/schema";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ===== AUTHENTICATION ROUTES =====
@@ -727,6 +728,355 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ===== PUBLIC ROUTES =====
+  
+  // Public result checking with PIN
+  app.post("/api/public/check-result", async (req, res) => {
+    try {
+      const { pin, admissionNumber } = req.body;
+
+      if (!pin || !admissionNumber) {
+        return res.status(400).json({ message: "PIN and admission number are required" });
+      }
+
+      // Find the PIN
+      const pinRecord = await storage.getPin(pin.toUpperCase());
+      if (!pinRecord) {
+        return res.status(404).json({ message: "Invalid PIN" });
+      }
+
+      // Check if PIN is expired
+      if (pinRecord.expiryDate && new Date(pinRecord.expiryDate) < new Date()) {
+        return res.status(400).json({ message: "This PIN has expired" });
+      }
+
+      // Check if PIN has reached max attempts
+      const attempts = Array.isArray(pinRecord.attempts) ? pinRecord.attempts : [];
+      if (pinRecord.maxAttempts && attempts.length >= pinRecord.maxAttempts) {
+        return res.status(400).json({ message: "This PIN has reached its maximum usage limit" });
+      }
+
+      // Find the student
+      const student = await storage.getStudentByAdmissionNumber(
+        admissionNumber.toUpperCase(), 
+        pinRecord.schoolId
+      );
+
+      if (!student) {
+        // Log failed attempt
+        const currentAttempts = Array.isArray(pinRecord.attempts) ? pinRecord.attempts : [];
+        await storage.updatePin(pinRecord.id, { 
+          attempts: [...currentAttempts, { type: "failed", admissionNumber, timestamp: new Date().toISOString() }]
+        });
+        return res.status(404).json({ message: "Student not found with this admission number" });
+      }
+
+      // Find the result for this student, session, and term
+      const result = await storage.getResultByStudentSessionTerm(
+        student.id,
+        pinRecord.session,
+        pinRecord.term
+      );
+
+      if (!result) {
+        return res.status(404).json({ 
+          message: `No result found for ${pinRecord.session} ${pinRecord.term} Term` 
+        });
+      }
+
+      // Check if result is approved
+      if (result.status !== "approved") {
+        return res.status(400).json({ message: "This result has not been approved yet" });
+      }
+
+      // Get school info
+      const school = await storage.getSchool(pinRecord.schoolId);
+
+      // Update PIN usage
+      const currentAttempts = Array.isArray(pinRecord.attempts) ? pinRecord.attempts : [];
+      await storage.updatePin(pinRecord.id, { 
+        isUsed: true,
+        attempts: [...currentAttempts, { type: "success", admissionNumber: student.admissionNumber, studentId: student.id, timestamp: new Date().toISOString() }],
+        usedBy: { admissionNumber: student.admissionNumber, studentName: `${student.firstName} ${student.lastName}`, usedAt: new Date().toISOString() },
+      });
+
+      // Return the result data
+      res.json({
+        student: {
+          firstName: student.firstName,
+          lastName: student.lastName,
+          admissionNumber: student.admissionNumber,
+          class: student.class,
+        },
+        school: {
+          name: school?.name || "Unknown School",
+          logo: school?.logo,
+          motto: school?.motto,
+        },
+        session: result.session,
+        term: result.term,
+        subjects: result.subjects,
+        totalScore: result.totalScore,
+        averageScore: result.averageScore,
+        position: result.position,
+        totalStudents: result.totalStudents,
+        teacherComment: result.teacherComment,
+        principalComment: result.principalComment,
+        attendance: result.attendance,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Public school registration (for school admins to register themselves)
+  const publicRegisterSchema = z.object({
+    schoolName: z.string().min(1, "School name is required"),
+    schoolCode: z.string().min(1, "School code is required").toUpperCase(),
+    schoolEmail: z.string().email("Valid email required"),
+    schoolPhone: z.string().optional(),
+    schoolAddress: z.string().optional(),
+    adminFirstName: z.string().min(1, "First name is required"),
+    adminLastName: z.string().min(1, "Last name is required"),
+    adminEmail: z.string().email("Valid email required"),
+    adminPassword: z.string().min(6, "Password must be at least 6 characters"),
+  });
+
+  app.post("/api/public/register-school", async (req, res) => {
+    try {
+      const validated = publicRegisterSchema.parse(req.body);
+
+      // Check if school code already exists
+      const existingSchool = await storage.getSchoolByCode(validated.schoolCode);
+      if (existingSchool) {
+        return res.status(400).json({ message: "School code already exists" });
+      }
+
+      // Check if admin email already exists
+      const existingUser = await storage.getUserByEmail(validated.adminEmail);
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      // Create the school (pending approval)
+      const school = await storage.createSchool({
+        name: validated.schoolName,
+        code: validated.schoolCode,
+        email: validated.schoolEmail,
+        phone: validated.schoolPhone ?? "",
+        address: validated.schoolAddress ?? "",
+        isActive: false, // Requires super admin approval
+      });
+
+      // Hash password and create admin user
+      const hashedPassword = await bcrypt.hash(validated.adminPassword, 10);
+      const user = await storage.createUser({
+        email: validated.adminEmail,
+        password: hashedPassword,
+        firstName: validated.adminFirstName,
+        lastName: validated.adminLastName,
+        role: "school_admin",
+        schoolId: school.id,
+        isActive: false, // Requires super admin approval
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+
+      res.status(201).json({
+        message: "Registration successful! Your account is pending approval.",
+        school: { id: school.id, name: school.name, code: school.code },
+        user: userWithoutPassword,
+      });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: error.errors[0]?.message || "Validation failed" });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ===== BULK UPLOAD ROUTES =====
+  
+  // Bulk upload students
+  app.post("/api/students/bulk", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
+    try {
+      const { students: studentData } = req.body;
+
+      if (!Array.isArray(studentData) || studentData.length === 0) {
+        return res.status(400).json({ message: "No student data provided" });
+      }
+
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[],
+      };
+
+      const validStudents = [];
+
+      for (let i = 0; i < studentData.length; i++) {
+        const row = studentData[i];
+        try {
+          // Check for required fields
+          if (!row.admissionNumber || !row.firstName || !row.lastName || !row.gender || !row.class) {
+            results.errors.push(`Row ${i + 1}: Missing required fields`);
+            results.failed++;
+            continue;
+          }
+
+          // Check for duplicate admission number
+          const existing = await storage.getStudentByAdmissionNumber(
+            row.admissionNumber.toUpperCase(),
+            schoolId
+          );
+
+          if (existing) {
+            results.errors.push(`Row ${i + 1}: Admission number ${row.admissionNumber} already exists`);
+            results.failed++;
+            continue;
+          }
+
+          validStudents.push({
+            schoolId,
+            admissionNumber: row.admissionNumber.toUpperCase(),
+            firstName: row.firstName,
+            lastName: row.lastName,
+            otherNames: row.otherNames || row.middleName || null,
+            gender: row.gender,
+            class: row.class,
+            classArm: row.classArm || null,
+            createdBy: req.user!.id,
+          });
+
+        } catch (err: any) {
+          results.errors.push(`Row ${i + 1}: ${err.message}`);
+          results.failed++;
+        }
+      }
+
+      // Bulk insert valid students
+      if (validStudents.length > 0) {
+        await storage.createStudents(validStudents);
+        results.success = validStudents.length;
+      }
+
+      res.json({
+        message: `Uploaded ${results.success} students successfully`,
+        ...results,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk upload results
+  app.post("/api/results/bulk", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
+    try {
+      const { results: resultData, session, term } = req.body;
+
+      if (!Array.isArray(resultData) || resultData.length === 0) {
+        return res.status(400).json({ message: "No result data provided" });
+      }
+
+      if (!session || !term) {
+        return res.status(400).json({ message: "Session and term are required" });
+      }
+
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const uploadResults = {
+        success: 0,
+        failed: 0,
+        errors: [] as string[],
+      };
+
+      const validResults = [];
+
+      for (let i = 0; i < resultData.length; i++) {
+        const row = resultData[i];
+        try {
+          // Find student by admission number
+          if (!row.admissionNumber) {
+            uploadResults.errors.push(`Row ${i + 1}: Missing admission number`);
+            uploadResults.failed++;
+            continue;
+          }
+
+          const student = await storage.getStudentByAdmissionNumber(
+            row.admissionNumber.toUpperCase(),
+            schoolId
+          );
+
+          if (!student) {
+            uploadResults.errors.push(`Row ${i + 1}: Student ${row.admissionNumber} not found`);
+            uploadResults.failed++;
+            continue;
+          }
+
+          // Check if result already exists for this student/session/term
+          const existingResult = await storage.getResultByStudentSessionTerm(student.id, session, term);
+          if (existingResult) {
+            uploadResults.errors.push(`Row ${i + 1}: Result already exists for ${row.admissionNumber}`);
+            uploadResults.failed++;
+            continue;
+          }
+
+          // Process subjects - calculate totals and grades
+          const subjectsInput = row.subjects?.map((subj: any) => ({
+            subject: subj.subject,
+            ca1: Number(subj.ca1) || 0,
+            ca2: Number(subj.ca2) || 0,
+            exam: Number(subj.exam) || 0,
+          })) || [];
+          
+          const calculated = calculateResults(subjectsInput);
+          const subjects = calculated.subjects;
+
+          const totalScore = subjects.reduce((sum: number, s: any) => sum + s.total, 0);
+          const averageScore = subjects.length > 0 ? totalScore / subjects.length : 0;
+
+          validResults.push({
+            schoolId,
+            studentId: student.id,
+            session,
+            term,
+            class: student.class,
+            subjects,
+            totalScore: totalScore.toFixed(2),
+            averageScore: averageScore.toFixed(2),
+            status: "draft",
+            uploadedBy: req.user!.id,
+          });
+
+        } catch (err: any) {
+          uploadResults.errors.push(`Row ${i + 1}: ${err.message}`);
+          uploadResults.failed++;
+        }
+      }
+
+      // Bulk insert valid results
+      if (validResults.length > 0) {
+        await storage.createResults(validResults);
+        uploadResults.success = validResults.length;
+      }
+
+      res.json({
+        message: `Uploaded ${uploadResults.success} results successfully`,
+        ...uploadResults,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
