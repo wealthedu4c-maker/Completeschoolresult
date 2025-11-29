@@ -70,6 +70,15 @@ Preferred communication style: Simple, everyday language.
 - Results Workflow: Submit, Approve, Reject, Publish actions with role-based controls
 - Enhanced school creation: Simplified form with subdomain, auto-generated code, admin user provisioning
 
+**Teacher Assignments & Result Workflow (Nov 2025)**
+- Teacher Assignment UI: School admins assign classes and subjects to teachers via dialog
+- Class creation two-step process: Create class details, then assign subjects immediately
+- Teacher filtering: Teachers only see results for classes/subjects assigned to them
+- Result upload restrictions: Teachers can only upload results for their assigned classes/subjects
+- Save Draft vs Submit: Results can be saved as drafts (editable) or submitted (sends notification to school admin)
+- Published result protection: Results with "published" status cannot be modified or commented on (enforced at API layer)
+- PIN request notifications: Super admins automatically notified when school admins request PINs
+
 ### Backend Architecture
 
 **Server Framework**

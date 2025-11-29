@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Pencil, Trash2, Loader2, BookOpen, FileStack } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Loader2, BookOpen, FileStack, ChevronRight, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -75,6 +75,8 @@ export default function Classes() {
   const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
   const [formData, setFormData] = useState(defaultFormData);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [createStep, setCreateStep] = useState<1 | 2>(1);
+  const [newlyCreatedClassId, setNewlyCreatedClassId] = useState<string | null>(null);
 
   const { data: classes = [], isLoading } = useQuery<ClassRecord[]>({
     queryKey: ["/api/classes"],
@@ -96,15 +98,22 @@ export default function Classes() {
     enabled: !!selectedClass,
   });
 
+  useEffect(() => {
+    if (selectedClass && classSubjects.length > 0) {
+      setSelectedSubjects(classSubjects.map(cs => cs.subjectId));
+    }
+  }, [selectedClass, classSubjects]);
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const res = await apiRequest("POST", "/api/classes", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (newClass) => {
       queryClient.invalidateQueries({ queryKey: ["/api/classes"] });
-      closeDialog();
-      toast({ title: "Success", description: "Class created successfully" });
+      setNewlyCreatedClassId(newClass.id);
+      setCreateStep(2);
+      toast({ title: "Success", description: "Class created! Now assign subjects." });
     },
     onError: (error: any) => {
       toast({ variant: "destructive", title: "Error", description: error.message });
@@ -154,6 +163,21 @@ export default function Classes() {
     },
   });
 
+  const assignSubjectsToNewClassMutation = useMutation({
+    mutationFn: async ({ classId, subjectIds }: { classId: string; subjectIds: string[] }) => {
+      const res = await apiRequest("PUT", `/api/classes/${classId}/subjects`, { subjectIds });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/classes"] });
+      closeDialog();
+      toast({ title: "Success", description: "Class created and subjects assigned!" });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
   const filteredClasses = classes.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -162,8 +186,22 @@ export default function Classes() {
 
   const closeDialog = () => {
     setIsDialogOpen(false);
+    setTimeout(() => {
+      setEditingClass(null);
+      setFormData(defaultFormData);
+      setCreateStep(1);
+      setNewlyCreatedClassId(null);
+      setSelectedSubjects([]);
+    }, 200);
+  };
+
+  const openCreateDialog = () => {
     setEditingClass(null);
     setFormData(defaultFormData);
+    setCreateStep(1);
+    setNewlyCreatedClassId(null);
+    setSelectedSubjects([]);
+    setIsDialogOpen(true);
   };
 
   const closeSubjectDialog = () => {
@@ -173,6 +211,9 @@ export default function Classes() {
   };
 
   const openEditDialog = (classRecord: ClassRecord) => {
+    setCreateStep(1);
+    setNewlyCreatedClassId(null);
+    setSelectedSubjects([]);
     setEditingClass(classRecord);
     setFormData({
       name: classRecord.name,
@@ -187,6 +228,7 @@ export default function Classes() {
 
   const openSubjectDialog = (classRecord: ClassRecord) => {
     setSelectedClass(classRecord);
+    setSelectedSubjects([]);
     setIsSubjectDialogOpen(true);
   };
 
@@ -207,9 +249,17 @@ export default function Classes() {
     );
   };
 
-  const handleSubjectsSubmit = () => {
-    if (selectedClass) {
-      updateSubjectsMutation.mutate({ classId: selectedClass.id, subjectIds: selectedSubjects });
+  const handleFinishCreation = () => {
+    if (newlyCreatedClassId) {
+      if (selectedSubjects.length > 0) {
+        assignSubjectsToNewClassMutation.mutate({
+          classId: newlyCreatedClassId,
+          subjectIds: selectedSubjects,
+        });
+      } else {
+        closeDialog();
+        toast({ title: "Class Created", description: "No subjects assigned. You can add subjects later." });
+      }
     }
   };
 
@@ -226,10 +276,6 @@ export default function Classes() {
     }
   };
 
-  const getSubjectCount = (classId: string) => {
-    return classSubjects.filter((cs) => cs.classId === classId).length;
-  };
-
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
@@ -241,7 +287,7 @@ export default function Classes() {
         </div>
         <Button 
           className="gap-2 w-full sm:w-auto" 
-          onClick={() => setIsDialogOpen(true)}
+          onClick={openCreateDialog}
           data-testid="button-add-class"
         >
           <Plus className="w-4 h-4" />
@@ -252,99 +298,270 @@ export default function Classes() {
       <Dialog open={isDialogOpen} onOpenChange={(open) => !open && closeDialog()}>
         <DialogContent className="max-w-md mx-4 sm:mx-auto">
           <DialogHeader>
-            <DialogTitle>{editingClass ? "Edit Class" : "Add New Class"}</DialogTitle>
+            <DialogTitle>
+              {editingClass 
+                ? "Edit Class" 
+                : createStep === 1 
+                ? "Add New Class" 
+                : "Assign Subjects"}
+            </DialogTitle>
             <DialogDescription>
-              {editingClass ? "Update class details" : "Create a new class for your school"}
+              {editingClass 
+                ? "Update class details" 
+                : createStep === 1 
+                ? "Step 1: Create a new class for your school" 
+                : "Step 2: Select subjects to be taught in this class"}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Class Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g., Primary 1, JSS 2A"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                data-testid="input-name"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+
+          {editingClass ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="level">Level</Label>
-                <Select
-                  value={formData.level}
-                  onValueChange={(value) => setFormData({ ...formData, level: value })}
-                >
-                  <SelectTrigger data-testid="select-level">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Primary">Primary</SelectItem>
-                    <SelectItem value="JSS">JSS</SelectItem>
-                    <SelectItem value="SS">SS</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="grade">Grade</Label>
-                <Select
-                  value={String(formData.grade)}
-                  onValueChange={(value) => setFormData({ ...formData, grade: Number(value) })}
-                >
-                  <SelectTrigger data-testid="select-grade">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3, 4, 5, 6].map((g) => (
-                      <SelectItem key={g} value={String(g)}>
-                        {g}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="arm">Arm (Optional)</Label>
+                <Label htmlFor="name">Class Name</Label>
                 <Input
-                  id="arm"
-                  placeholder="e.g., A, B, C"
-                  value={formData.arm}
-                  onChange={(e) => setFormData({ ...formData, arm: e.target.value.toUpperCase() })}
-                  maxLength={1}
-                  data-testid="input-arm"
+                  id="name"
+                  placeholder="e.g., Primary 1, JSS 2A"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  data-testid="input-name"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="level">Level</Label>
+                  <Select
+                    value={formData.level}
+                    onValueChange={(value) => setFormData({ ...formData, level: value })}
+                  >
+                    <SelectTrigger data-testid="select-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Primary">Primary</SelectItem>
+                      <SelectItem value="JSS">JSS</SelectItem>
+                      <SelectItem value="SS">SS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="grade">Grade</Label>
+                  <Select
+                    value={String(formData.grade)}
+                    onValueChange={(value) => setFormData({ ...formData, grade: Number(value) })}
+                  >
+                    <SelectTrigger data-testid="select-grade">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6].map((g) => (
+                        <SelectItem key={g} value={String(g)}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="arm">Arm (Optional)</Label>
+                  <Input
+                    id="arm"
+                    placeholder="e.g., A, B, C"
+                    value={formData.arm}
+                    onChange={(e) => setFormData({ ...formData, arm: e.target.value.toUpperCase() })}
+                    maxLength={1}
+                    data-testid="input-arm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="capacity">Capacity</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    value={formData.capacity}
+                    onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+                    min={1}
+                    data-testid="input-capacity"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="capacity">Capacity</Label>
+                <Label htmlFor="academicYear">Academic Year</Label>
                 <Input
-                  id="capacity"
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                  min={1}
-                  data-testid="input-capacity"
+                  id="academicYear"
+                  placeholder="e.g., 2024/2025"
+                  value={formData.academicYear}
+                  onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                  required
+                  data-testid="input-academic-year"
                 />
               </div>
+              <Button type="submit" className="w-full" disabled={isPending} data-testid="button-submit">
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Update Class
+              </Button>
+            </form>
+          ) : createStep === 1 ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Class Name</Label>
+                <Input
+                  id="name"
+                  placeholder="e.g., Primary 1, JSS 2A"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  data-testid="input-name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="level">Level</Label>
+                  <Select
+                    value={formData.level}
+                    onValueChange={(value) => setFormData({ ...formData, level: value })}
+                  >
+                    <SelectTrigger data-testid="select-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Primary">Primary</SelectItem>
+                      <SelectItem value="JSS">JSS</SelectItem>
+                      <SelectItem value="SS">SS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="grade">Grade</Label>
+                  <Select
+                    value={String(formData.grade)}
+                    onValueChange={(value) => setFormData({ ...formData, grade: Number(value) })}
+                  >
+                    <SelectTrigger data-testid="select-grade">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6].map((g) => (
+                        <SelectItem key={g} value={String(g)}>
+                          {g}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="arm">Arm (Optional)</Label>
+                  <Input
+                    id="arm"
+                    placeholder="e.g., A, B, C"
+                    value={formData.arm}
+                    onChange={(e) => setFormData({ ...formData, arm: e.target.value.toUpperCase() })}
+                    maxLength={1}
+                    data-testid="input-arm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="capacity">Capacity</Label>
+                  <Input
+                    id="capacity"
+                    type="number"
+                    value={formData.capacity}
+                    onChange={(e) => setFormData({ ...formData, capacity: Number(e.target.value) })}
+                    min={1}
+                    data-testid="input-capacity"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="academicYear">Academic Year</Label>
+                <Input
+                  id="academicYear"
+                  placeholder="e.g., 2024/2025"
+                  value={formData.academicYear}
+                  onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
+                  required
+                  data-testid="input-academic-year"
+                />
+              </div>
+              <Button type="submit" className="w-full gap-2" disabled={isPending} data-testid="button-submit">
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Next: Assign Subjects
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Badge variant="outline">{formData.name}</Badge>
+                <span>- Select subjects to assign</span>
+              </div>
+              
+              <ScrollArea className="h-[300px] pr-4 border rounded-lg">
+                <div className="p-3 space-y-2">
+                  {subjects.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">
+                      No subjects available. You can add subjects later.
+                    </p>
+                  ) : (
+                    subjects.map((subject) => (
+                      <div
+                        key={subject.id}
+                        className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors
+                          ${selectedSubjects.includes(subject.id) 
+                            ? "bg-primary/10 border-primary" 
+                            : "hover-elevate"
+                          }`}
+                        onClick={() => handleSubjectToggle(subject.id)}
+                        data-testid={`create-subject-toggle-${subject.id}`}
+                      >
+                        <Checkbox
+                          checked={selectedSubjects.includes(subject.id)}
+                          onCheckedChange={() => {}}
+                          className="pointer-events-none"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{subject.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {subject.code} - {subject.category}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+
+              <div className="text-sm text-muted-foreground">
+                {selectedSubjects.length} subject(s) selected
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setCreateStep(1)}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Back
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleFinishCreation}
+                  disabled={assignSubjectsToNewClassMutation.isPending}
+                  data-testid="button-finish-create"
+                >
+                  {assignSubjectsToNewClassMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  {selectedSubjects.length > 0 ? "Finish & Assign Subjects" : "Skip & Finish"}
+                </Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="academicYear">Academic Year</Label>
-              <Input
-                id="academicYear"
-                placeholder="e.g., 2024/2025"
-                value={formData.academicYear}
-                onChange={(e) => setFormData({ ...formData, academicYear: e.target.value })}
-                required
-                data-testid="input-academic-year"
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={isPending} data-testid="button-submit">
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              {editingClass ? "Update Class" : "Create Class"}
-            </Button>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -370,27 +587,21 @@ export default function Classes() {
                     </p>
                   ) : (
                     subjects.map((subject) => {
-                      const isAssigned = classSubjects.some((cs) => cs.subjectId === subject.id);
-                      const isSelected = selectedSubjects.includes(subject.id) || 
-                        (selectedSubjects.length === 0 && isAssigned);
+                      const isSelected = selectedSubjects.includes(subject.id);
                       
                       return (
                         <div
                           key={subject.id}
-                          className="flex items-center space-x-3 p-3 rounded-lg border hover-elevate cursor-pointer"
-                          onClick={() => {
-                            if (selectedSubjects.length === 0 && isAssigned) {
-                              setSelectedSubjects(classSubjects.map((cs) => cs.subjectId).filter((id) => id !== subject.id));
-                            } else if (selectedSubjects.length === 0) {
-                              setSelectedSubjects([...classSubjects.map((cs) => cs.subjectId), subject.id]);
-                            } else {
-                              handleSubjectToggle(subject.id);
-                            }
-                          }}
+                          className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors
+                            ${isSelected 
+                              ? "bg-primary/10 border-primary" 
+                              : "hover-elevate"
+                            }`}
+                          onClick={() => handleSubjectToggle(subject.id)}
                           data-testid={`subject-toggle-${subject.id}`}
                         >
                           <Checkbox
-                            checked={selectedSubjects.length > 0 ? selectedSubjects.includes(subject.id) : isAssigned}
+                            checked={isSelected}
                             onCheckedChange={() => {}}
                             className="pointer-events-none"
                           />
@@ -412,13 +623,10 @@ export default function Classes() {
                 </Button>
                 <Button
                   onClick={() => {
-                    const subjectIdsToSave = selectedSubjects.length > 0 
-                      ? selectedSubjects 
-                      : classSubjects.map((cs) => cs.subjectId);
                     if (selectedClass) {
                       updateSubjectsMutation.mutate({ 
                         classId: selectedClass.id, 
-                        subjectIds: subjectIdsToSave 
+                        subjectIds: selectedSubjects 
                       });
                     }
                   }}

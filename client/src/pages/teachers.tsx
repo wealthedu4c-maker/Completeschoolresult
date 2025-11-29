@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -28,7 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, UserCheck, UserX, KeyRound, Loader2, Mail, Phone } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, Search, UserCheck, UserX, Loader2, Mail, Phone, BookOpen, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 
@@ -44,10 +46,42 @@ interface Teacher {
   createdAt: string;
 }
 
+interface ClassRecord {
+  id: string;
+  name: string;
+  level: string;
+  grade: number;
+  arm?: string;
+  academicYear: string;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+}
+
+interface TeacherAssignment {
+  id: string;
+  teacherId: string;
+  classId: string;
+  subjectId: string;
+  academicYear: string;
+}
+
+interface AssignmentSelection {
+  classId: string;
+  subjectId: string;
+}
+
 export default function Teachers() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [assignments, setAssignments] = useState<AssignmentSelection[]>([]);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -61,6 +95,39 @@ export default function Teachers() {
   const { data: teachers = [], isLoading } = useQuery<Teacher[]>({
     queryKey: ["/api/users"],
   });
+
+  const { data: classes = [] } = useQuery<ClassRecord[]>({
+    queryKey: ["/api/classes"],
+  });
+
+  const { data: subjects = [] } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+  });
+
+  const { data: teacherAssignmentsData = [], isLoading: isLoadingAssignments } = useQuery<TeacherAssignment[]>({
+    queryKey: ["/api/teacher-assignments", selectedTeacher?.id],
+    queryFn: async () => {
+      if (!selectedTeacher) return [];
+      const res = await fetch(`/api/teacher-assignments/${selectedTeacher.id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      return res.json();
+    },
+    enabled: !!selectedTeacher,
+  });
+
+  useEffect(() => {
+    if (selectedTeacher && teacherAssignmentsData.length > 0) {
+      setAssignments(
+        teacherAssignmentsData.map((a) => ({
+          classId: a.classId,
+          subjectId: a.subjectId,
+        }))
+      );
+    } else if (selectedTeacher) {
+      setAssignments([]);
+    }
+  }, [selectedTeacher, teacherAssignmentsData]);
 
   const teachersList = teachers.filter(t => t.role === "teacher");
 
@@ -97,6 +164,58 @@ export default function Teachers() {
       toast({ variant: "destructive", title: "Error", description: error.message });
     },
   });
+
+  const assignmentsMutation = useMutation({
+    mutationFn: async ({ teacherId, assignments: assignmentData }: { teacherId: string; assignments: AssignmentSelection[] }) => {
+      const res = await apiRequest("PUT", `/api/teacher-assignments/${teacherId}`, { assignments: assignmentData });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/teacher-assignments"] });
+      closeAssignDialog();
+      toast({ title: "Success", description: "Teacher assignments updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
+  const closeAssignDialog = () => {
+    setIsAssignDialogOpen(false);
+    setSelectedTeacher(null);
+    setAssignments([]);
+  };
+
+  const openAssignDialog = (teacher: Teacher) => {
+    setSelectedTeacher(teacher);
+    setIsAssignDialogOpen(true);
+  };
+
+  const toggleAssignment = (classId: string, subjectId: string) => {
+    const exists = assignments.some((a) => a.classId === classId && a.subjectId === subjectId);
+    if (exists) {
+      setAssignments(assignments.filter((a) => !(a.classId === classId && a.subjectId === subjectId)));
+    } else {
+      setAssignments([...assignments, { classId, subjectId }]);
+    }
+  };
+
+  const isAssigned = (classId: string, subjectId: string) => {
+    return assignments.some((a) => a.classId === classId && a.subjectId === subjectId);
+  };
+
+  const handleAssignSubmit = () => {
+    if (selectedTeacher) {
+      assignmentsMutation.mutate({
+        teacherId: selectedTeacher.id,
+        assignments,
+      });
+    }
+  };
+
+  const getTeacherAssignmentCount = (teacherId: string) => {
+    return 0;
+  };
 
   const filteredTeachers = teachersList.filter(
     (t) =>
@@ -262,7 +381,17 @@ export default function Teachers() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openAssignDialog(teacher)}
+                            className="gap-1"
+                            data-testid={`button-assign-${teacher.id}`}
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            <span className="hidden sm:inline">Assign</span>
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"
@@ -282,6 +411,101 @@ export default function Teachers() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isAssignDialogOpen} onOpenChange={(open) => !open && closeAssignDialog()}>
+        <DialogContent className="max-w-2xl mx-4 sm:mx-auto max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              Assign Classes & Subjects
+            </DialogTitle>
+            <DialogDescription>
+              Assign classes and subjects to {selectedTeacher?.firstName} {selectedTeacher?.lastName}. 
+              Select the combinations of class and subject this teacher will handle.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isLoadingAssignments ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  Click on a class-subject combination to assign or remove. 
+                  Selected: <span className="font-semibold">{assignments.length}</span> assignments
+                </div>
+                
+                <ScrollArea className="h-[400px] pr-4 border rounded-lg">
+                  <div className="p-4 space-y-4">
+                    {classes.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">
+                        No classes available. Please add classes first.
+                      </p>
+                    ) : subjects.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">
+                        No subjects available. Please add subjects first.
+                      </p>
+                    ) : (
+                      classes.map((classRecord) => (
+                        <div key={classRecord.id} className="space-y-2">
+                          <div className="font-medium text-sm bg-muted/50 px-3 py-2 rounded-md flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            {classRecord.name}
+                            {classRecord.arm && ` (${classRecord.arm})`}
+                            <span className="text-xs text-muted-foreground">- {classRecord.academicYear}</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4">
+                            {subjects.map((subject) => {
+                              const assigned = isAssigned(classRecord.id, subject.id);
+                              return (
+                                <div
+                                  key={`${classRecord.id}-${subject.id}`}
+                                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors
+                                    ${assigned 
+                                      ? "bg-primary/10 border-primary text-primary" 
+                                      : "hover-elevate"
+                                    }`}
+                                  onClick={() => toggleAssignment(classRecord.id, subject.id)}
+                                  data-testid={`assignment-${classRecord.id}-${subject.id}`}
+                                >
+                                  <Checkbox
+                                    checked={assigned}
+                                    onCheckedChange={() => {}}
+                                    className="pointer-events-none"
+                                  />
+                                  <span className="text-sm truncate">{subject.name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+              
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={closeAssignDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAssignSubmit}
+                  disabled={assignmentsMutation.isPending}
+                  data-testid="button-save-assignments"
+                >
+                  {assignmentsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Save Assignments
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

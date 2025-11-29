@@ -439,6 +439,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Cannot comment on results from other schools" });
       }
 
+      // Published results cannot be edited
+      if (existing.status === "published") {
+        return res.status(400).json({ message: "Published results cannot be modified" });
+      }
+
       const { comment } = req.body;
       if (!comment || typeof comment !== "string") {
         return res.status(400).json({ message: "Comment is required" });
@@ -1593,6 +1598,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (result.schoolId !== req.user!.schoolId) {
         return res.status(403).json({ message: "Cannot comment on results from other schools" });
+      }
+
+      // Published results cannot be edited
+      if (result.status === "published") {
+        return res.status(400).json({ message: "Published results cannot be modified" });
       }
 
       const { teacherComment, principalComment } = req.body;
