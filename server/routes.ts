@@ -163,6 +163,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // School admin can update their own school (logo, motto, address, phone)
+  app.patch("/api/schools/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      // Verify school belongs to user
+      if (req.params.id !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update other schools" });
+      }
+
+      // Only allow specific fields to be updated by school admin
+      const { logo, motto, address, phone } = req.body;
+      const updateData: any = {};
+      
+      if (logo !== undefined) updateData.logo = logo;
+      if (motto !== undefined) updateData.motto = motto;
+      if (address !== undefined) updateData.address = address;
+      if (phone !== undefined) updateData.phone = phone;
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+
+      const school = await storage.updateSchool(req.params.id, updateData);
+      res.json(school);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Activate/Deactivate school
   app.patch("/api/schools/:id/status", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
     try {

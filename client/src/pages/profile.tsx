@@ -127,6 +127,7 @@ export default function Profile() {
         });
 
         queryClient.invalidateQueries({ queryKey: ["/api/schools", user.schoolId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/schools/me"] });
 
         toast({
           title: "Logo Updated",
@@ -154,6 +155,7 @@ export default function Profile() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["/api/schools", user.schoolId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/schools/me"] });
       setLogoPreview(null);
 
       toast({

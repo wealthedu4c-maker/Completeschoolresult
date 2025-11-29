@@ -428,7 +428,11 @@ export const insertResultSchema = createInsertSchema(results, {
     grade: z.string().optional(),
     remark: z.string().optional(),
   })),
-}).omit({ id: true, createdAt: true, updatedAt: true, uploadedBy: true, totalScore: true, averageScore: true, status: true });
+  uploadedBy: z.string().optional(),
+  totalScore: z.string().optional(),
+  averageScore: z.string().optional(),
+  status: z.string().optional(),
+}).omit({ id: true, createdAt: true, updatedAt: true });
 
 export const insertPinSchema = createInsertSchema(pins).omit({ id: true, createdAt: true, updatedAt: true });
 

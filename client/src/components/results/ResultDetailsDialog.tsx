@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Link } from "wouter";
 import type { Result, Student, School } from "@shared/schema";
 
 interface ResultDetailsDialogProps {
@@ -215,7 +216,15 @@ export function ResultDetailsDialog({ open, onOpenChange, result: initialResult 
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                You must upload your school logo in Profile Settings before you can approve results.
+                You must upload your school logo before you can approve results.{" "}
+                <Link 
+                  href="/profile" 
+                  className="underline font-semibold hover:text-destructive-foreground/80"
+                  onClick={() => onOpenChange(false)}
+                  data-testid="link-profile-settings"
+                >
+                  Click here to go to Profile Settings
+                </Link>
               </AlertDescription>
             </Alert>
           )}
