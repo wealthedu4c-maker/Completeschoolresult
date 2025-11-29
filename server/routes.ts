@@ -163,6 +163,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Activate/Deactivate school
+  app.patch("/api/schools/:id/status", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
+    try {
+      const { isActive } = req.body;
+      if (typeof isActive !== "boolean") {
+        return res.status(400).json({ message: "isActive must be a boolean" });
+      }
+
+      const school = await storage.getSchool(req.params.id);
+      if (!school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      const updated = await storage.updateSchool(req.params.id, { isActive });
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: isActive ? "activate_school" : "deactivate_school",
+        resource: "school",
+        resourceId: req.params.id,
+        details: { schoolName: school.name, isActive },
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/schools/:id", authenticate, authorize("super_admin"), async (req, res) => {
     try {
       await storage.deleteSchool(req.params.id);
@@ -486,8 +516,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/pins", authenticate, authorize("super_admin", "school_admin"), async (req: AuthRequest, res) => {
     try {
-      const { quantity, session, term, schoolId } = req.body;
+      const { quantity, session, term, schoolId, maxUsageCount = 1 } = req.body;
       const targetSchoolId = req.user!.role === "super_admin" ? schoolId : req.user!.schoolId!;
+
+      if (!targetSchoolId) {
+        return res.status(400).json({ message: "School ID is required" });
+      }
+
+      // Validate maxUsageCount
+      const usageLimit = Math.max(1, Math.min(100, parseInt(maxUsageCount) || 1));
 
       const pinsToCreate = [];
       const expiryDate = new Date();
@@ -500,6 +537,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           session,
           term,
           expiryDate,
+          maxUsageCount: usageLimit,
           generatedBy: req.user!.id,
         });
       }
@@ -794,6 +832,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Request has already been processed" });
       }
 
+      // Get maxUsageCount from request body, default to 1
+      const { maxUsageCount = 1 } = req.body;
+      const usageLimit = Math.max(1, Math.min(100, parseInt(maxUsageCount) || 1));
+
       // Generate PINs for the approved request
       const pinsToCreate = [];
       const expiryDate = new Date();
@@ -806,6 +848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           session: request.session,
           term: request.term,
           expiryDate,
+          maxUsageCount: usageLimit,
           generatedBy: req.user!.id,
         });
       }
@@ -818,6 +861,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processedBy: req.user!.id,
         processedAt: new Date(),
         generatedPinIds: pins.map(p => p.id),
+      });
+
+      // Notify the requester
+      await storage.createNotification({
+        userId: request.requestedBy,
+        type: "pin_request_approved",
+        title: "PIN Request Approved",
+        message: `Your request for ${request.quantity} PINs for ${request.session} ${request.term} Term has been approved.`,
+        data: { requestId: request.id, quantity: request.quantity },
       });
 
       res.json(updated);

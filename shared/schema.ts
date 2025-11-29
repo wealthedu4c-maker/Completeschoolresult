@@ -169,6 +169,8 @@ export const pins = pgTable("pins", {
   usedBy: jsonb("used_by"), // {admissionNumber, studentName, usedAt, ipAddress}
   attempts: jsonb("attempts").default([]), // Array of attempt objects
   maxAttempts: integer("max_attempts").default(3).notNull(),
+  maxUsageCount: integer("max_usage_count").default(1).notNull(), // How many times PIN can be used to check results
+  usageCount: integer("usage_count").default(0).notNull(), // Current number of times PIN has been used
   expiryDate: timestamp("expiry_date").notNull(),
   generatedBy: uuid("generated_by").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
