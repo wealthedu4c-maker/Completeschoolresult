@@ -3,6 +3,7 @@ import { AppSidebar } from "./AppSidebar";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { ReactNode } from "react";
+import { NotificationsDropdown } from "./NotificationsDropdown";
 
 interface User {
   firstName: string;
@@ -36,18 +37,21 @@ export function DashboardLayout({ children, user, onLogout }: DashboardLayoutPro
                 <p className="text-sm text-muted-foreground">Manage your school efficiently</p>
               </div>
             </div>
-            {onLogout && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={onLogout}
-                data-testid="button-logout"
-                className="gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <NotificationsDropdown />
+              {onLogout && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={onLogout}
+                  data-testid="button-logout"
+                  className="gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </Button>
+              )}
+            </div>
           </header>
           <main className="flex-1 overflow-auto bg-background">
             {children}

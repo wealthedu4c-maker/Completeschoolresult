@@ -26,6 +26,7 @@ import PinRequests from "@/pages/pin-requests";
 import Users from "@/pages/users";
 import Analytics from "@/pages/analytics";
 import Profile from "@/pages/profile";
+import ScoreMetrics from "@/pages/score-metrics";
 
 interface User {
   id: string;
@@ -152,6 +153,12 @@ function Router() {
       <Route path="/profile">
         <ProtectedRoute>
           <Profile />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/score-metrics">
+        <ProtectedRoute>
+          <ScoreMetrics />
         </ProtectedRoute>
       </Route>
 

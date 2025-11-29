@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +28,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Pencil, Trash2, Loader2, BookOpen } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Loader2, BookOpen, FileStack } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ClassRecord {
   id: string;
@@ -39,6 +42,19 @@ interface ClassRecord {
   academicYear: string;
   capacity?: number;
   createdAt: string;
+}
+
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  category: string;
+}
+
+interface ClassSubject {
+  id: string;
+  classId: string;
+  subjectId: string;
 }
 
 const defaultFormData = {
@@ -54,11 +70,30 @@ export default function Classes() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubjectDialogOpen, setIsSubjectDialogOpen] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassRecord | null>(null);
   const [editingClass, setEditingClass] = useState<ClassRecord | null>(null);
   const [formData, setFormData] = useState(defaultFormData);
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
 
   const { data: classes = [], isLoading } = useQuery<ClassRecord[]>({
     queryKey: ["/api/classes"],
+  });
+
+  const { data: subjects = [] } = useQuery<Subject[]>({
+    queryKey: ["/api/subjects"],
+  });
+
+  const { data: classSubjects = [], isLoading: isLoadingClassSubjects } = useQuery<ClassSubject[]>({
+    queryKey: ["/api/classes", selectedClass?.id, "subjects"],
+    queryFn: async () => {
+      if (!selectedClass) return [];
+      const res = await fetch(`/api/classes/${selectedClass.id}/subjects`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      return res.json();
+    },
+    enabled: !!selectedClass,
   });
 
   const createMutation = useMutation({
@@ -104,6 +139,21 @@ export default function Classes() {
     },
   });
 
+  const updateSubjectsMutation = useMutation({
+    mutationFn: async ({ classId, subjectIds }: { classId: string; subjectIds: string[] }) => {
+      const res = await apiRequest("PUT", `/api/classes/${classId}/subjects`, { subjectIds });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/classes", selectedClass?.id, "subjects"] });
+      closeSubjectDialog();
+      toast({ title: "Success", description: "Class subjects updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
   const filteredClasses = classes.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -114,6 +164,12 @@ export default function Classes() {
     setIsDialogOpen(false);
     setEditingClass(null);
     setFormData(defaultFormData);
+  };
+
+  const closeSubjectDialog = () => {
+    setIsSubjectDialogOpen(false);
+    setSelectedClass(null);
+    setSelectedSubjects([]);
   };
 
   const openEditDialog = (classRecord: ClassRecord) => {
@@ -129,12 +185,31 @@ export default function Classes() {
     setIsDialogOpen(true);
   };
 
+  const openSubjectDialog = (classRecord: ClassRecord) => {
+    setSelectedClass(classRecord);
+    setIsSubjectDialogOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingClass) {
       updateMutation.mutate({ id: editingClass.id, data: formData });
     } else {
       createMutation.mutate(formData);
+    }
+  };
+
+  const handleSubjectToggle = (subjectId: string) => {
+    setSelectedSubjects((prev) =>
+      prev.includes(subjectId)
+        ? prev.filter((id) => id !== subjectId)
+        : [...prev, subjectId]
+    );
+  };
+
+  const handleSubjectsSubmit = () => {
+    if (selectedClass) {
+      updateSubjectsMutation.mutate({ classId: selectedClass.id, subjectIds: selectedSubjects });
     }
   };
 
@@ -151,6 +226,10 @@ export default function Classes() {
     }
   };
 
+  const getSubjectCount = (classId: string) => {
+    return classSubjects.filter((cs) => cs.classId === classId).length;
+  };
+
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
@@ -158,7 +237,7 @@ export default function Classes() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Classes</h2>
-          <p className="text-muted-foreground">Manage your school's class structure</p>
+          <p className="text-muted-foreground">Manage your school's class structure and subject assignments</p>
         </div>
         <Button 
           className="gap-2 w-full sm:w-auto" 
@@ -269,6 +348,94 @@ export default function Classes() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isSubjectDialogOpen} onOpenChange={(open) => !open && closeSubjectDialog()}>
+        <DialogContent className="max-w-md mx-4 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle>Assign Subjects to {selectedClass?.name}</DialogTitle>
+            <DialogDescription>
+              Select which subjects are taught in this class
+            </DialogDescription>
+          </DialogHeader>
+          {isLoadingClassSubjects ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+          ) : (
+            <>
+              <ScrollArea className="h-[300px] pr-4">
+                <div className="space-y-3">
+                  {subjects.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4">
+                      No subjects available. Please add subjects first.
+                    </p>
+                  ) : (
+                    subjects.map((subject) => {
+                      const isAssigned = classSubjects.some((cs) => cs.subjectId === subject.id);
+                      const isSelected = selectedSubjects.includes(subject.id) || 
+                        (selectedSubjects.length === 0 && isAssigned);
+                      
+                      return (
+                        <div
+                          key={subject.id}
+                          className="flex items-center space-x-3 p-3 rounded-lg border hover-elevate cursor-pointer"
+                          onClick={() => {
+                            if (selectedSubjects.length === 0 && isAssigned) {
+                              setSelectedSubjects(classSubjects.map((cs) => cs.subjectId).filter((id) => id !== subject.id));
+                            } else if (selectedSubjects.length === 0) {
+                              setSelectedSubjects([...classSubjects.map((cs) => cs.subjectId), subject.id]);
+                            } else {
+                              handleSubjectToggle(subject.id);
+                            }
+                          }}
+                          data-testid={`subject-toggle-${subject.id}`}
+                        >
+                          <Checkbox
+                            checked={selectedSubjects.length > 0 ? selectedSubjects.includes(subject.id) : isAssigned}
+                            onCheckedChange={() => {}}
+                            className="pointer-events-none"
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">{subject.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {subject.code} - {subject.category}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </ScrollArea>
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={closeSubjectDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const subjectIdsToSave = selectedSubjects.length > 0 
+                      ? selectedSubjects 
+                      : classSubjects.map((cs) => cs.subjectId);
+                    if (selectedClass) {
+                      updateSubjectsMutation.mutate({ 
+                        classId: selectedClass.id, 
+                        subjectIds: subjectIdsToSave 
+                      });
+                    }
+                  }}
+                  disabled={updateSubjectsMutation.isPending}
+                  data-testid="button-save-subjects"
+                >
+                  {updateSubjectsMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : null}
+                  Save Changes
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <Card>
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -325,6 +492,16 @@ export default function Classes() {
                       <TableCell className="hidden lg:table-cell">{classRecord.capacity || "-"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openSubjectDialog(classRecord)}
+                            className="gap-1"
+                            data-testid={`button-subjects-${classRecord.id}`}
+                          >
+                            <FileStack className="w-3 h-3" />
+                            <span className="hidden sm:inline">Subjects</span>
+                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"

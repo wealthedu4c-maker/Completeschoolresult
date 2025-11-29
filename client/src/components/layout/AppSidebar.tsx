@@ -9,7 +9,8 @@ import {
   Settings,
   BookOpen,
   ClipboardList,
-  FileStack
+  FileStack,
+  Settings2
 } from "lucide-react";
 import {
   Sidebar,
@@ -54,6 +55,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
     { title: "Teachers", url: "/teachers", icon: Users },
     { title: "Classes", url: "/classes", icon: BookOpen },
     { title: "Subjects", url: "/subjects", icon: FileStack },
+    { title: "Score Metrics", url: "/score-metrics", icon: Settings2 },
     { title: "Results", url: "/results", icon: FileText },
     { title: "PINs", url: "/pins", icon: Key },
     { title: "PIN Requests", url: "/pin-requests", icon: ClipboardList },
