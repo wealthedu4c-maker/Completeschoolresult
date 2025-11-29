@@ -474,7 +474,7 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
                                   max={getMaxScore("ca1")}
                                   value={score.ca1 || ""}
                                   onChange={(e) => updateStudentScore(score.studentId, "ca1", e.target.value)}
-                                  className="h-8 text-center w-full"
+                                  className="h-8 text-center w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   data-testid={`input-ca1-${index}`}
                                 />
                               </TableCell>
@@ -485,7 +485,7 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
                                   max={getMaxScore("ca2")}
                                   value={score.ca2 || ""}
                                   onChange={(e) => updateStudentScore(score.studentId, "ca2", e.target.value)}
-                                  className="h-8 text-center w-full"
+                                  className="h-8 text-center w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   data-testid={`input-ca2-${index}`}
                                 />
                               </TableCell>
@@ -496,7 +496,7 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
                                   max={getMaxScore("exam")}
                                   value={score.exam || ""}
                                   onChange={(e) => updateStudentScore(score.studentId, "exam", e.target.value)}
-                                  className="h-8 text-center w-full"
+                                  className="h-8 text-center w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   data-testid={`input-exam-${index}`}
                                 />
                               </TableCell>

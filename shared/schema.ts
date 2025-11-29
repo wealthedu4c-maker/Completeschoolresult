@@ -421,14 +421,14 @@ export const insertResultSchema = createInsertSchema(results, {
   term: z.enum(["First", "Second", "Third"]),
   subjects: z.array(z.object({
     subject: z.string(),
-    ca1: z.number().min(0).max(10),
-    ca2: z.number().min(0).max(10),
-    exam: z.number().min(0).max(80),
+    ca1: z.number().min(0).max(100),
+    ca2: z.number().min(0).max(100),
+    exam: z.number().min(0).max(100),
     total: z.number().optional(),
     grade: z.string().optional(),
     remark: z.string().optional(),
   })),
-}).omit({ id: true, createdAt: true, updatedAt: true });
+}).omit({ id: true, createdAt: true, updatedAt: true, uploadedBy: true, totalScore: true, averageScore: true, status: true });
 
 export const insertPinSchema = createInsertSchema(pins).omit({ id: true, createdAt: true, updatedAt: true });
 
