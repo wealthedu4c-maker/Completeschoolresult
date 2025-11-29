@@ -64,6 +64,12 @@ Preferred communication style: Simple, everyday language.
 - `/api/schools/me` endpoint for school admins/teachers to access own school data
 - Role-based access control for comment and approval actions
 
+**Score Metrics & Class Subjects (Nov 2025)**
+- Score Metrics page: School admins configure grading metrics (maxScore, weight, labels)
+- Class Subject Assignment: Assign subjects to classes via Classes page dialog
+- Results Workflow: Submit, Approve, Reject, Publish actions with role-based controls
+- Enhanced school creation: Simplified form with subdomain, auto-generated code, admin user provisioning
+
 ### Backend Architecture
 
 **Server Framework**
@@ -111,13 +117,16 @@ Preferred communication style: Simple, everyday language.
 
 **Schema Design**
 - **users**: Multi-role user accounts (super_admin, school_admin, teacher) with email/password auth
-- **schools**: School profiles with metadata (name, code, address, logo, motto)
+- **schools**: School profiles with metadata (name, code, subdomain, address, logo, motto)
 - **students**: Student records linked to schools with admission numbers and class information
-- **results**: Academic results with draft→submitted→approved workflow and subject scores array
+- **results**: Academic results with draft→submitted→approved→published workflow and subject scores array
 - **pins**: One-time use PINs for result checking with expiry, usage tracking, and attempt limits
 - **pinRequests**: School admin requests for PINs, processed by super admin
 - **classes**: Class/grade definitions per academic year
 - **subjects**: Subject catalog per school
+- **classSubjects**: Maps subjects to classes for course assignment
+- **scoreMetrics**: Configurable grading metrics (CA weights, max scores) per school
+- **notifications**: In-app notifications for users (PIN requests, result approvals, etc.)
 - **teacherAssignments**: Maps teachers to subjects and classes
 - **auditLogs**: Activity tracking for compliance and debugging
 
