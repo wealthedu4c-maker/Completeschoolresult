@@ -1,28 +1,26 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Building2, User } from "lucide-react";
+import { ArrowLeft, Loader2, Upload, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     schoolName: "",
-    schoolCode: "",
-    schoolEmail: "",
-    schoolPhone: "",
-    adminFirstName: "",
-    adminLastName: "",
-    adminEmail: "",
-    adminPassword: "",
+    email: "",
+    password: "",
     confirmPassword: "",
+    logo: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,22 +30,49 @@ export default function Register() {
     }));
   };
 
-  const validateStep1 = () => {
-    if (!formData.schoolName || !formData.schoolCode || !formData.schoolEmail) {
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Please fill in all required school fields",
+        title: "Invalid file",
+        description: "Please upload an image file",
       });
-      return false;
+      return;
     }
-    return true;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: "Please upload an image smaller than 2MB",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setLogoPreview(dataUrl);
+      setFormData((prev) => ({ ...prev, logo: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeLogo = () => {
+    setLogoPreview(null);
+    setFormData((prev) => ({ ...prev, logo: "" }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.adminFirstName || !formData.adminLastName || !formData.adminEmail || !formData.adminPassword) {
+    if (!formData.schoolName || !formData.email || !formData.password) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -56,7 +81,7 @@ export default function Register() {
       return;
     }
 
-    if (formData.adminPassword !== formData.confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -65,7 +90,7 @@ export default function Register() {
       return;
     }
 
-    if (formData.adminPassword.length < 6) {
+    if (formData.password.length < 6) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -77,18 +102,30 @@ export default function Register() {
     setLoading(true);
 
     try {
+      // Generate a school code from the name
+      const schoolCode = formData.schoolName
+        .split(" ")
+        .map((word) => word[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 3) +
+        Math.floor(Math.random() * 1000)
+          .toString()
+          .padStart(3, "0");
+
       const response = await fetch("/api/public/register-school", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schoolName: formData.schoolName,
-          schoolCode: formData.schoolCode.toUpperCase(),
-          schoolEmail: formData.schoolEmail,
-          schoolPhone: formData.schoolPhone,
-          adminFirstName: formData.adminFirstName,
-          adminLastName: formData.adminLastName,
-          adminEmail: formData.adminEmail,
-          adminPassword: formData.adminPassword,
+          schoolCode: schoolCode,
+          schoolEmail: formData.email,
+          schoolPhone: "",
+          adminFirstName: "Admin",
+          adminLastName: formData.schoolName.split(" ")[0],
+          adminEmail: formData.email,
+          adminPassword: formData.password,
+          logo: formData.logo,
         }),
       });
 
@@ -135,190 +172,140 @@ export default function Register() {
             </div>
             <CardTitle className="text-2xl">Register Your School</CardTitle>
             <CardDescription>
-              {step === 1 
-                ? "Enter your school details to get started" 
-                : "Create your admin account"}
+              Create your school account to get started
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit}>
-              {step === 1 ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                    <Building2 className="w-4 h-4" />
-                    <span>Step 1: School Information</span>
-                  </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="schoolName">School Name *</Label>
+                <Input
+                  id="schoolName"
+                  name="schoolName"
+                  placeholder="Demo High School"
+                  value={formData.schoolName}
+                  onChange={handleChange}
+                  required
+                  data-testid="input-school-name"
+                />
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolName">School Name *</Label>
-                    <Input
-                      id="schoolName"
-                      name="schoolName"
-                      placeholder="Demo High School"
-                      value={formData.schoolName}
-                      onChange={handleChange}
-                      required
-                      data-testid="input-school-name"
-                    />
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address *</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="admin@school.edu.ng"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  data-testid="input-email"
+                />
+                <p className="text-xs text-muted-foreground">
+                  This will be your login email
+                </p>
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolCode">School Code *</Label>
-                    <Input
-                      id="schoolCode"
-                      name="schoolCode"
-                      placeholder="DHS001"
-                      value={formData.schoolCode}
-                      onChange={handleChange}
-                      className="uppercase"
-                      required
-                      data-testid="input-school-code"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A unique code for your school (e.g., DHS001)
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolEmail">School Email *</Label>
-                    <Input
-                      id="schoolEmail"
-                      name="schoolEmail"
-                      type="email"
-                      placeholder="info@school.edu.ng"
-                      value={formData.schoolEmail}
-                      onChange={handleChange}
-                      required
-                      data-testid="input-school-email"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="schoolPhone">School Phone (Optional)</Label>
-                    <Input
-                      id="schoolPhone"
-                      name="schoolPhone"
-                      placeholder="+234 xxx xxx xxxx"
-                      value={formData.schoolPhone}
-                      onChange={handleChange}
-                      data-testid="input-school-phone"
-                    />
-                  </div>
-
-                  <Button
-                    type="button"
-                    className="w-full"
-                    onClick={() => validateStep1() && setStep(2)}
-                    data-testid="button-next"
-                  >
-                    Next Step
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
-                    <User className="w-4 h-4" />
-                    <span>Step 2: Admin Account</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="adminFirstName">First Name *</Label>
-                      <Input
-                        id="adminFirstName"
-                        name="adminFirstName"
-                        placeholder="John"
-                        value={formData.adminFirstName}
-                        onChange={handleChange}
-                        required
-                        data-testid="input-admin-first-name"
-                      />
+              <div className="space-y-2">
+                <Label>School Logo (Optional)</Label>
+                <div className="flex items-center gap-4">
+                  {logoPreview ? (
+                    <div className="relative">
+                      <Avatar className="h-16 w-16">
+                        <AvatarImage src={logoPreview} alt="School logo" />
+                        <AvatarFallback>
+                          {formData.schoolName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={removeLogo}
+                        data-testid="button-remove-logo"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="adminLastName">Last Name *</Label>
-                      <Input
-                        id="adminLastName"
-                        name="adminLastName"
-                        placeholder="Doe"
-                        value={formData.adminLastName}
-                        onChange={handleChange}
-                        required
-                        data-testid="input-admin-last-name"
-                      />
+                  ) : (
+                    <div
+                      className="h-16 w-16 rounded-full border-2 border-dashed border-muted-foreground/25 flex items-center justify-center cursor-pointer hover:border-primary/50 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-5 w-5 text-muted-foreground" />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="adminEmail">Admin Email *</Label>
-                    <Input
-                      id="adminEmail"
-                      name="adminEmail"
-                      type="email"
-                      placeholder="admin@school.edu.ng"
-                      value={formData.adminEmail}
-                      onChange={handleChange}
-                      required
-                      data-testid="input-admin-email"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="adminPassword">Password *</Label>
-                    <Input
-                      id="adminPassword"
-                      name="adminPassword"
-                      type="password"
-                      placeholder="Min 6 characters"
-                      value={formData.adminPassword}
-                      onChange={handleChange}
-                      required
-                      data-testid="input-admin-password"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                    <Input
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      type="password"
-                      placeholder="Confirm password"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      required
-                      data-testid="input-confirm-password"
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="hidden"
+                    data-testid="input-logo"
+                  />
+                  <div className="flex-1">
                     <Button
                       type="button"
                       variant="outline"
-                      className="flex-1"
-                      onClick={() => setStep(1)}
-                      data-testid="button-back"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      data-testid="button-upload-logo"
                     >
-                      Back
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Logo
                     </Button>
-                    <Button
-                      type="submit"
-                      className="flex-1"
-                      disabled={loading}
-                      data-testid="button-submit"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Registering...
-                        </>
-                      ) : (
-                        "Register School"
-                      )}
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Max 2MB, PNG or JPG
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder="Min 6 characters"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  data-testid="input-password"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  placeholder="Confirm password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  data-testid="input-confirm-password"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading}
+                data-testid="button-submit"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  "Register School"
+                )}
+              </Button>
             </form>
 
             <div className="mt-6 pt-6 border-t text-center">

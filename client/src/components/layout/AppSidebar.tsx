@@ -128,22 +128,30 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
       {user && (
         <SidebarFooter className="p-4">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-sidebar-accent">
-            <Avatar className="w-10 h-10">
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                {user.firstName[0]}{user.lastName[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {user.firstName} {user.lastName}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-              <Badge className={`mt-1 text-xs ${getRoleBadgeColor(user.role)}`} data-testid="badge-user-role">
-                {getRoleLabel(user.role)}
-              </Badge>
+          <Link href="/profile">
+            <div 
+              className="flex items-start gap-3 p-3 rounded-lg bg-sidebar-accent hover-elevate cursor-pointer"
+              data-testid="link-profile"
+            >
+              <Avatar className="w-10 h-10">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                  {user.firstName[0]}{user.lastName[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {user.firstName} {user.lastName}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className={`text-xs ${getRoleBadgeColor(user.role)}`} data-testid="badge-user-role">
+                    {getRoleLabel(user.role)}
+                  </Badge>
+                  <Settings className="w-3 h-3 text-muted-foreground" />
+                </div>
+              </div>
             </div>
-          </div>
+          </Link>
         </SidebarFooter>
       )}
     </Sidebar>

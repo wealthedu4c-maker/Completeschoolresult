@@ -82,6 +82,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current user's school (for school_admin and teacher)
+  app.get("/api/schools/me", authenticate, async (req: AuthRequest, res) => {
+    try {
+      if (!req.user!.schoolId) {
+        return res.status(404).json({ message: "No school associated with this user" });
+      }
+      const school = await storage.getSchool(req.user!.schoolId);
+      if (!school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+      res.json(school);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/schools", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
     try {
       const validated = insertSchoolSchema.parse(req.body);
@@ -296,6 +312,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Only submitted results can be approved" });
       }
 
+      // Check if school has a logo before approving results
+      const school = await storage.getSchool(req.user!.schoolId!);
+      if (!school?.logo) {
+        return res.status(400).json({ 
+          message: "Please upload your school logo in Profile Settings before approving results" 
+        });
+      }
+
       const result = await storage.updateResult(req.params.id, {
         status: "approved",
         approvedBy: req.user!.id,
@@ -352,6 +376,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resourceId: req.params.id,
         details: { resultId: req.params.id, studentId: existing.studentId, reason: req.body.reason },
       });
+
+      res.json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Add comment to result (teacher adds teacher comment, school_admin adds principal comment)
+  app.patch("/api/results/:id/comment", authenticate, authorize("teacher", "school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const existing = await storage.getResult(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Result not found" });
+      }
+
+      // Verify result belongs to user's school
+      if (existing.schoolId !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot comment on results from other schools" });
+      }
+
+      const { comment } = req.body;
+      if (!comment || typeof comment !== "string") {
+        return res.status(400).json({ message: "Comment is required" });
+      }
+
+      // Teacher adds teacherComment, school_admin adds principalComment
+      const updateData = req.user!.role === "teacher" 
+        ? { teacherComment: comment }
+        : { principalComment: comment };
+
+      const result = await storage.updateResult(req.params.id, updateData);
 
       res.json(result);
     } catch (error: any) {
@@ -452,77 +507,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ===== PUBLIC ROUTES =====
-  app.post("/api/public/check-result", async (req, res) => {
-    try {
-      const { pin, admissionNumber } = req.body;
-
-      const pinRecord = await storage.getPin(pin.toUpperCase());
-      if (!pinRecord) {
-        return res.status(404).json({ message: "Invalid PIN" });
-      }
-
-      if (pinRecord.isUsed) {
-        return res.status(400).json({ message: "PIN has already been used" });
-      }
-
-      if (new Date() > new Date(pinRecord.expiryDate)) {
-        return res.status(400).json({ message: "PIN has expired" });
-      }
-
-      // Find student by admission number and school
-      const students = await storage.listStudents(pinRecord.schoolId);
-      const student = students.find(s => s.admissionNumber.toUpperCase() === admissionNumber.toUpperCase());
-
-      if (!student) {
-        return res.status(404).json({ message: "Student not found" });
-      }
-
-      // Find result
-      const results = await storage.listResults(pinRecord.schoolId, {
-        session: pinRecord.session,
-        term: pinRecord.term,
-        status: "approved",
-      });
-
-      const result = results.find(r => r.studentId === student.id);
-      if (!result) {
-        return res.status(404).json({ message: "No result found for this student" });
-      }
-
-      // Mark PIN as used
-      await storage.updatePin(pinRecord.id, {
-        isUsed: true,
-        usedBy: {
-          admissionNumber: student.admissionNumber,
-          studentName: `${student.firstName} ${student.lastName}`,
-          usedAt: new Date(),
-          ipAddress: req.ip,
-        },
-      });
-
-      // Get school details
-      const school = await storage.getSchool(pinRecord.schoolId);
-
-      res.json({
-        student: {
-          firstName: student.firstName,
-          lastName: student.lastName,
-          admissionNumber: student.admissionNumber,
-          class: student.class,
-        },
-        school: {
-          name: school?.name,
-          logo: school?.logo,
-          motto: school?.motto,
-        },
-        ...result,
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
   // ===== ANALYTICS ROUTES =====
   app.get("/api/analytics/dashboard", authenticate, async (req: AuthRequest, res) => {
     try {
@@ -564,6 +548,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updated = await storage.updateUser(req.params.id, req.body);
       const { password, ...userWithoutPassword } = updated;
       res.json(userWithoutPassword);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Password change endpoint - allows users to change their own password
+  app.patch("/api/users/:id/password", authenticate, async (req: AuthRequest, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      // Users can only change their own password
+      if (req.params.id !== req.user!.id) {
+        return res.status(403).json({ message: "You can only change your own password" });
+      }
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "New password must be at least 6 characters" });
+      }
+
+      const user = await storage.getUser(req.params.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+      if (!isValidPassword) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password and update
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await storage.updateUser(req.params.id, { password: hashedPassword });
+
+      res.json({ message: "Password updated successfully" });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
@@ -768,16 +791,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public result checking with PIN
   app.post("/api/public/check-result", async (req, res) => {
     try {
-      const { pin, admissionNumber } = req.body;
+      const { pin, admissionNumber, session, term } = req.body;
 
       if (!pin || !admissionNumber) {
-        return res.status(400).json({ message: "PIN and admission number are required" });
+        return res.status(400).json({ message: "PIN and registration number are required" });
+      }
+
+      if (!session || !term) {
+        return res.status(400).json({ message: "Academic year and term are required" });
       }
 
       // Find the PIN
       const pinRecord = await storage.getPin(pin.toUpperCase());
       if (!pinRecord) {
         return res.status(404).json({ message: "Invalid PIN" });
+      }
+
+      // Validate session and term match the PIN
+      if (pinRecord.session !== session || pinRecord.term !== term) {
+        return res.status(400).json({ 
+          message: `This PIN is only valid for ${pinRecord.session} ${pinRecord.term} Term` 
+        });
       }
 
       // Check if PIN is expired
@@ -803,14 +837,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updatePin(pinRecord.id, { 
           attempts: [...currentAttempts, { type: "failed", admissionNumber, timestamp: new Date().toISOString() }]
         });
-        return res.status(404).json({ message: "Student not found with this admission number" });
+        return res.status(404).json({ message: "Student not found with this registration number" });
       }
 
       // Find the result for this student, session, and term
       const result = await storage.getResultByStudentSessionTerm(
         student.id,
-        pinRecord.session,
-        pinRecord.term
+        session,
+        term
       );
 
       if (!result) {
@@ -875,6 +909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     adminLastName: z.string().min(1, "Last name is required"),
     adminEmail: z.string().email("Valid email required"),
     adminPassword: z.string().min(6, "Password must be at least 6 characters"),
+    logo: z.string().optional(),
   });
 
   app.post("/api/public/register-school", async (req, res) => {
@@ -900,6 +935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: validated.schoolEmail,
         phone: validated.schoolPhone ?? "",
         address: validated.schoolAddress ?? "",
+        logo: validated.logo,
         isActive: false, // Requires super admin approval
       });
 

@@ -52,10 +52,17 @@ Preferred communication style: Simple, everyday language.
 - Components: BulkUploadDialog (students), BulkResultUploadDialog (results)
 
 **Public School Registration (Nov 2025)**
-- Two-step registration: Step 1 (School info) → Step 2 (Admin account)
+- One-step registration: School name, email, optional logo, password, confirm password
 - Creates school with isActive: false (requires super admin approval)
 - Creates school_admin user linked to the school
 - Route: /register
+
+**Result Approval & Comments (Nov 2025)**
+- ResultDetailsDialog: View result details, subject scores, and comments
+- Teacher and principal comments on results
+- School logo requirement before result approval (enforced backend and frontend)
+- `/api/schools/me` endpoint for school admins/teachers to access own school data
+- Role-based access control for comment and approval actions
 
 ### Backend Architecture
 
@@ -69,8 +76,8 @@ Preferred communication style: Simple, everyday language.
 - RESTful conventions with resource-based endpoints
 - Authentication endpoints: `/api/auth/login`, `/api/auth/register`
 - Resource endpoints: `/api/schools`, `/api/students`, `/api/results`, `/api/pins`, `/api/users`, `/api/classes`, `/api/subjects`, `/api/pin-requests`
-- Action endpoints: `/api/pin-requests/:id/approve`, `/api/pin-requests/:id/reject`
-- Utility endpoints: `/api/analytics/dashboard` for dashboard statistics
+- Action endpoints: `/api/pin-requests/:id/approve`, `/api/pin-requests/:id/reject`, `/api/results/:id/approve`, `/api/results/:id/reject`, `/api/results/:id/comment`
+- Utility endpoints: `/api/analytics/dashboard` for dashboard statistics, `/api/schools/me` for current user's school
 - Public endpoints: `/api/public/check-result` (PIN-based result lookup), `/api/public/register-school` (school registration)
 - Bulk upload endpoints: `/api/students/bulk`, `/api/results/bulk`
 - Result calculation utilities for grading and GPA computation
@@ -81,6 +88,7 @@ Preferred communication style: Simple, everyday language.
 - Class/subject deletion routes verify school ownership before proceeding
 - PIN request approval restricted to super_admin role only
 - User status updates verified against school ownership
+- Result approval requires school logo to be uploaded (enforced at API layer)
 
 **Authentication & Authorization**
 - JWT tokens stored in localStorage (client-side)

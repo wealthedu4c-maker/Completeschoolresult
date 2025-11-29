@@ -16,10 +16,15 @@ import { useState } from "react";
 import type { Result } from "@shared/schema";
 import { Link } from "wouter";
 import { BulkResultUploadDialog } from "@/components/results/BulkResultUploadDialog";
+import { UploadResultDialog } from "@/components/results/UploadResultDialog";
+import { ResultDetailsDialog } from "@/components/results/ResultDetailsDialog";
 
 export default function Results() {
   const [searchQuery, setSearchQuery] = useState("");
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<Result | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
 
   const { data: results, isLoading } = useQuery<Result[]>({
     queryKey: ["/api/results"],
@@ -68,7 +73,10 @@ export default function Results() {
               <Upload className="w-4 h-4" />
               Bulk Upload
             </Button>
-            <Button data-testid="button-upload-result">
+            <Button 
+              onClick={() => setUploadDialogOpen(true)}
+              data-testid="button-upload-result"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Upload Result
             </Button>
@@ -132,27 +140,26 @@ export default function Results() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => {
+                            setSelectedResult(result);
+                            setDetailsDialogOpen(true);
+                          }}
                           data-testid={`button-view-${result.id}`}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
                         {!isTeacher && result.status === "submitted" && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              data-testid={`button-approve-${result.id}`}
-                            >
-                              <CheckCircle className="w-4 h-4 text-green-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              data-testid={`button-reject-${result.id}`}
-                            >
-                              <XCircle className="w-4 h-4 text-red-600" />
-                            </Button>
-                          </>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedResult(result);
+                              setDetailsDialogOpen(true);
+                            }}
+                            data-testid={`button-approve-${result.id}`}
+                          >
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          </Button>
                         )}
                       </div>
                     </TableCell>
@@ -171,6 +178,12 @@ export default function Results() {
       </Card>
 
       <BulkResultUploadDialog open={bulkUploadOpen} onOpenChange={setBulkUploadOpen} />
+      <UploadResultDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} />
+      <ResultDetailsDialog 
+        open={detailsDialogOpen} 
+        onOpenChange={setDetailsDialogOpen} 
+        result={selectedResult} 
+      />
     </div>
   );
 }
