@@ -943,10 +943,15 @@ export default function Results() {
                   </TableHeader>
                   <TableBody>
                     {selectedSheet.entries && selectedSheet.entries.length > 0 ? (
-                      selectedSheet.entries.map((entry, idx) => (
+                      selectedSheet.entries.map((entry: any, idx: number) => (
                         <TableRow key={entry.id || idx}>
                           <TableCell className="font-medium">
-                            Student #{entry.studentId.substring(0, 8)}
+                            {entry.studentName || `Student #${entry.studentId.substring(0, 8)}`}
+                            {entry.admissionNumber && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                ({entry.admissionNumber})
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">{entry.ca1}</TableCell>
                           <TableCell className="text-center">{entry.ca2}</TableCell>

@@ -641,7 +641,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get entries for the sheet
       const entries = await storage.listResultSheetEntries(sheet.id);
 
-      res.json({ sheet, entries });
+      // Enrich entries with student names
+      const allStudents = await storage.listStudents(req.user!.schoolId!);
+      const studentMap = new Map(allStudents.map(s => [s.id, s]));
+
+      const enrichedEntries = entries.map(entry => {
+        const student = studentMap.get(entry.studentId);
+        const studentName = student 
+          ? `${student.firstName} ${student.lastName}` 
+          : "Unknown Student";
+        return {
+          ...entry,
+          studentName,
+          admissionNumber: student?.admissionNumber || "",
+        };
+      });
+
+      res.json({ sheet, entries: enrichedEntries });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
