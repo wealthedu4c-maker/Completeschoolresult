@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Search, Eye, Send, CheckCircle, XCircle, Upload, Globe, FileEdit, Table2, ClipboardList, BookOpen } from "lucide-react";
+import { Plus, Search, Eye, Send, CheckCircle, XCircle, Upload, Globe, FileEdit, Table2, ClipboardList, BookOpen, Trash2, Archive } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -73,6 +74,11 @@ export default function Results() {
   const [sheetDetailsOpen, setSheetDetailsOpen] = useState(false);
   const [sheetRejectDialogOpen, setSheetRejectDialogOpen] = useState(false);
   const [sheetRejectReason, setSheetRejectReason] = useState("");
+  const [selectedSheetIds, setSelectedSheetIds] = useState<string[]>([]);
+  const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
+  const [bulkActionDialogOpen, setBulkActionDialogOpen] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState<"delete" | "archive">("delete");
+  const [bulkActionTarget, setBulkActionTarget] = useState<"sheets" | "results">("sheets");
 
   const { data: results, isLoading } = useQuery<Result[]>({
     queryKey: ["/api/results"],
@@ -185,6 +191,38 @@ export default function Results() {
     },
   });
 
+  const bulkSheetActionMutation = useMutation({
+    mutationFn: async ({ ids, action }: { ids: string[]; action: "delete" | "archive" }) => {
+      const res = await apiRequest("POST", "/api/result-sheets/bulk-action", { ids, action });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/result-sheets"] });
+      setSelectedSheetIds([]);
+      setBulkActionDialogOpen(false);
+      toast({ title: "Success", description: data.message });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
+  const bulkResultActionMutation = useMutation({
+    mutationFn: async ({ ids, action }: { ids: string[]; action: "delete" | "archive" }) => {
+      const res = await apiRequest("POST", "/api/results/bulk-action", { ids, action });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/results"] });
+      setSelectedResultIds([]);
+      setBulkActionDialogOpen(false);
+      toast({ title: "Success", description: data.message });
+    },
+    onError: (error: any) => {
+      toast({ variant: "destructive", title: "Error", description: error.message });
+    },
+  });
+
   const getClassName = (classId: string) => {
     const classRecord = classes.find(c => c.id === classId);
     return classRecord?.name || classId;
@@ -256,6 +294,52 @@ export default function Results() {
 
   const canRejectSheet = (sheet: ResultSheet) => 
     isSchoolAdmin && sheet.status === "submitted";
+
+  const toggleSheetSelection = (sheetId: string) => {
+    setSelectedSheetIds(prev => 
+      prev.includes(sheetId) 
+        ? prev.filter(id => id !== sheetId)
+        : [...prev, sheetId]
+    );
+  };
+
+  const toggleAllSheets = () => {
+    if (selectedSheetIds.length === filteredSheets.length) {
+      setSelectedSheetIds([]);
+    } else {
+      setSelectedSheetIds(filteredSheets.map(s => s.id));
+    }
+  };
+
+  const toggleResultSelection = (resultId: string) => {
+    setSelectedResultIds(prev => 
+      prev.includes(resultId) 
+        ? prev.filter(id => id !== resultId)
+        : [...prev, resultId]
+    );
+  };
+
+  const toggleAllResults = () => {
+    if (filteredResults && selectedResultIds.length === filteredResults.length) {
+      setSelectedResultIds([]);
+    } else if (filteredResults) {
+      setSelectedResultIds(filteredResults.map(r => r.id));
+    }
+  };
+
+  const openBulkActionDialog = (action: "delete" | "archive", target: "sheets" | "results") => {
+    setBulkActionType(action);
+    setBulkActionTarget(target);
+    setBulkActionDialogOpen(true);
+  };
+
+  const executeBulkAction = () => {
+    if (bulkActionTarget === "sheets") {
+      bulkSheetActionMutation.mutate({ ids: selectedSheetIds, action: bulkActionType });
+    } else {
+      bulkResultActionMutation.mutate({ ids: selectedResultIds, action: bulkActionType });
+    }
+  };
 
   const handleViewSheetDetails = async (sheet: ResultSheetWithDetails) => {
     try {
@@ -349,10 +433,46 @@ export default function Results() {
               </div>
             </div>
 
+            {isSchoolAdmin && selectedSheetIds.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium">{selectedSheetIds.length} selected</span>
+                <div className="flex-1" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionDialog("archive", "sheets")}
+                  className="gap-2"
+                  data-testid="button-bulk-archive-sheets"
+                >
+                  <Archive className="w-4 h-4" />
+                  Archive
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => openBulkActionDialog("delete", "sheets")}
+                  className="gap-2"
+                  data-testid="button-bulk-delete-sheets"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </Button>
+              </div>
+            )}
+
             <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isSchoolAdmin && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={filteredSheets.length > 0 && selectedSheetIds.length === filteredSheets.length}
+                          onCheckedChange={toggleAllSheets}
+                          data-testid="checkbox-select-all-sheets"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Session</TableHead>
                     <TableHead>Term</TableHead>
                     <TableHead>Class</TableHead>
@@ -372,6 +492,15 @@ export default function Results() {
                   ) : filteredSheets.length > 0 ? (
                     filteredSheets.map((sheet) => (
                       <TableRow key={sheet.id} data-testid={`row-sheet-${sheet.id}`}>
+                        {isSchoolAdmin && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSheetIds.includes(sheet.id)}
+                              onCheckedChange={() => toggleSheetSelection(sheet.id)}
+                              data-testid={`checkbox-sheet-${sheet.id}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium">{sheet.session}</TableCell>
                         <TableCell>{sheet.term}</TableCell>
                         <TableCell>{getClassName(sheet.classId)}</TableCell>
@@ -417,6 +546,21 @@ export default function Results() {
                                 data-testid={`button-reject-sheet-${sheet.id}`}
                               >
                                 <XCircle className="w-4 h-4 text-red-600" />
+                              </Button>
+                            )}
+
+                            {isSchoolAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSelectedSheetIds([sheet.id]);
+                                  openBulkActionDialog("delete", "sheets");
+                                }}
+                                title="Delete Sheet"
+                                data-testid={`button-delete-sheet-${sheet.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
                               </Button>
                             )}
                           </div>
@@ -466,10 +610,46 @@ export default function Results() {
               </div>
             </div>
 
+            {isSchoolAdmin && selectedResultIds.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium">{selectedResultIds.length} selected</span>
+                <div className="flex-1" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openBulkActionDialog("archive", "results")}
+                  className="gap-2"
+                  data-testid="button-bulk-archive-results"
+                >
+                  <Archive className="w-4 h-4" />
+                  Archive
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => openBulkActionDialog("delete", "results")}
+                  className="gap-2"
+                  data-testid="button-bulk-delete-results"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </Button>
+              </div>
+            )}
+
             <div className="rounded-lg border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {isSchoolAdmin && (
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={filteredResults && filteredResults.length > 0 && selectedResultIds.length === filteredResults.length}
+                          onCheckedChange={toggleAllResults}
+                          data-testid="checkbox-select-all-results"
+                        />
+                      </TableHead>
+                    )}
                     <TableHead>Session</TableHead>
                     <TableHead>Term</TableHead>
                     <TableHead>Class</TableHead>
@@ -483,13 +663,22 @@ export default function Results() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={isSchoolAdmin ? 9 : 8} className="text-center py-8">
                         Loading results...
                       </TableCell>
                     </TableRow>
                   ) : filteredResults && filteredResults.length > 0 ? (
                     filteredResults.map((result) => (
                       <TableRow key={result.id} data-testid={`row-result-${result.id}`}>
+                        {isSchoolAdmin && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedResultIds.includes(result.id)}
+                              onCheckedChange={() => toggleResultSelection(result.id)}
+                              data-testid={`checkbox-result-${result.id}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium">{result.session}</TableCell>
                         <TableCell>{result.term}</TableCell>
                         <TableCell>{result.class}</TableCell>
@@ -573,13 +762,28 @@ export default function Results() {
                                 <Globe className="w-4 h-4 text-blue-600" />
                               </Button>
                             )}
+
+                            {isSchoolAdmin && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSelectedResultIds([result.id]);
+                                  openBulkActionDialog("delete", "results");
+                                }}
+                                title="Delete Result"
+                                data-testid={`button-delete-${result.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-600" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={isSchoolAdmin ? 9 : 8} className="text-center py-8 text-muted-foreground">
                         No results found
                       </TableCell>
                     </TableRow>
@@ -769,6 +973,41 @@ export default function Results() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={bulkActionDialogOpen} onOpenChange={setBulkActionDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkActionType === "delete" ? "Delete" : "Archive"} {bulkActionTarget === "sheets" ? "Result Sheets" : "Results"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkActionType === "delete" ? (
+                <>
+                  Are you sure you want to permanently delete {bulkActionTarget === "sheets" ? selectedSheetIds.length : selectedResultIds.length} {bulkActionTarget === "sheets" ? "result sheet(s)" : "result(s)"}? 
+                  This action cannot be undone.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to archive {bulkActionTarget === "sheets" ? selectedSheetIds.length : selectedResultIds.length} {bulkActionTarget === "sheets" ? "result sheet(s)" : "result(s)"}? 
+                  Archived items will be removed from the main view but can be restored later.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeBulkAction}
+              disabled={bulkSheetActionMutation.isPending || bulkResultActionMutation.isPending}
+              className={bulkActionType === "delete" ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+              data-testid="button-confirm-bulk-action"
+            >
+              {(bulkSheetActionMutation.isPending || bulkResultActionMutation.isPending) ? "Processing..." : 
+                bulkActionType === "delete" ? "Delete" : "Archive"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

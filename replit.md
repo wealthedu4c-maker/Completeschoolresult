@@ -96,6 +96,16 @@ Preferred communication style: Simple, everyday language.
 - Result Sheet Details Dialog: View all student entries with CA1, CA2, Exam, Total, and Grade columns
 - Pending Badge: Result Sheets tab shows count of pending sheets awaiting approval
 
+**Delete & Archive Features (Nov 2025)**
+- Delete & Archive Actions: School admins can delete or archive result sheets and student results
+- Archived Tables: Three archived tables (archived_result_sheets, archived_result_sheet_entries, archived_results) store archived data
+- Bulk Operations: Select multiple items with checkboxes, perform bulk delete/archive with confirmation dialog
+- Individual Actions: Delete/archive single items via row action buttons
+- Cascading Cleanup: Deleting result sheets also removes associated entries; archiving preserves full data in archived tables
+- Role-Based Access: Only school admins can delete/archive results; super admins have broader access
+- API Endpoints: DELETE /api/result-sheets/:id, DELETE /api/results/:id, POST /api/result-sheets/bulk-action, POST /api/results/bulk-action
+- Data Integrity: Archive transactions move records atomically, maintaining referential integrity with archivedAt/archivedBy fields
+
 ### Backend Architecture
 
 **Server Framework**

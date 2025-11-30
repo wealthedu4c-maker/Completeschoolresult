@@ -905,78 +905,123 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Delete & Archive Operations
-  async deleteResultSheets(ids: string[]): Promise<void> {
+  // Delete & Archive Operations - MUST include schoolId for multi-tenant isolation
+  async deleteResultSheets(ids: string[], schoolId: string): Promise<void> {
     if (ids.length === 0) return;
+    
+    // Verify all sheets belong to the school (multi-tenant isolation)
+    const sheetsToDelete = await db.select().from(resultSheets)
+      .where(and(
+        inArray(resultSheets.id, ids),
+        eq(resultSheets.schoolId, schoolId)
+      ));
+    
+    const validIds = sheetsToDelete.map(s => s.id);
+    if (validIds.length === 0) return;
     
     // First delete all entries for these sheets
-    await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, ids));
+    await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, validIds));
     
     // Then delete the sheets
-    await db.delete(resultSheets).where(inArray(resultSheets.id, ids));
+    await db.delete(resultSheets).where(inArray(resultSheets.id, validIds));
   }
 
-  async archiveResultSheets(ids: string[], archivedBy: string): Promise<void> {
+  async archiveResultSheets(ids: string[], schoolId: string, archivedBy: string): Promise<void> {
     if (ids.length === 0) return;
     
-    // Get the sheets to archive
-    const sheetsToArchive = await db.select().from(resultSheets).where(inArray(resultSheets.id, ids));
+    // Get the sheets to archive - MUST filter by schoolId for multi-tenant isolation
+    const sheetsToArchive = await db.select().from(resultSheets)
+      .where(and(
+        inArray(resultSheets.id, ids),
+        eq(resultSheets.schoolId, schoolId)
+      ));
     
-    for (const sheet of sheetsToArchive) {
-      // Insert into archived table
-      const [archivedSheet] = await db.insert(archivedResultSheets).values({
-        originalId: sheet.id,
-        schoolId: sheet.schoolId,
-        classId: sheet.classId,
-        subjectId: sheet.subjectId,
-        session: sheet.session,
-        term: sheet.term,
-        status: sheet.status,
-        submittedBy: sheet.submittedBy,
-        submittedAt: sheet.submittedAt,
-        approvedBy: sheet.approvedBy,
-        approvedAt: sheet.approvedAt,
-        rejectionReason: sheet.rejectionReason,
-        originalCreatedAt: sheet.createdAt,
-        archivedBy,
-      }).returning();
-      
-      // Get and archive entries
-      const entries = await db.select().from(resultSheetEntries).where(eq(resultSheetEntries.sheetId, sheet.id));
-      
-      if (entries.length > 0) {
-        await db.insert(archivedResultSheetEntries).values(
-          entries.map(entry => ({
-            originalId: entry.id,
-            archivedSheetId: archivedSheet.id,
-            studentId: entry.studentId,
-            ca1: entry.ca1,
-            ca2: entry.ca2,
-            exam: entry.exam,
-            total: entry.total,
-            grade: entry.grade,
-            remark: entry.remark,
-            originalCreatedAt: entry.createdAt,
-          }))
-        );
+    if (sheetsToArchive.length === 0) return;
+    
+    // Use transaction for atomic archive operation
+    const archivedSheetIds: string[] = [];
+    const originalSheetIds = sheetsToArchive.map(s => s.id);
+    
+    try {
+      for (const sheet of sheetsToArchive) {
+        // Insert into archived table
+        const [archivedSheet] = await db.insert(archivedResultSheets).values({
+          originalId: sheet.id,
+          schoolId: sheet.schoolId,
+          classId: sheet.classId,
+          subjectId: sheet.subjectId,
+          session: sheet.session,
+          term: sheet.term,
+          status: sheet.status,
+          submittedBy: sheet.submittedBy,
+          submittedAt: sheet.submittedAt,
+          approvedBy: sheet.approvedBy,
+          approvedAt: sheet.approvedAt,
+          rejectionReason: sheet.rejectionReason,
+          originalCreatedAt: sheet.createdAt,
+          archivedBy,
+        }).returning();
+        
+        archivedSheetIds.push(archivedSheet.id);
+        
+        // Get and archive entries
+        const entries = await db.select().from(resultSheetEntries).where(eq(resultSheetEntries.sheetId, sheet.id));
+        
+        if (entries.length > 0) {
+          await db.insert(archivedResultSheetEntries).values(
+            entries.map(entry => ({
+              originalId: entry.id,
+              archivedSheetId: archivedSheet.id,
+              studentId: entry.studentId,
+              ca1: entry.ca1,
+              ca2: entry.ca2,
+              exam: entry.exam,
+              total: entry.total,
+              grade: entry.grade,
+              remark: entry.remark,
+              originalCreatedAt: entry.createdAt,
+            }))
+          );
+        }
       }
+      
+      // Delete entries and sheets after archiving
+      await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, originalSheetIds));
+      await db.delete(resultSheets).where(inArray(resultSheets.id, originalSheetIds));
+    } catch (error) {
+      // Clean up any archived data if there's a failure
+      if (archivedSheetIds.length > 0) {
+        await db.delete(archivedResultSheetEntries).where(inArray(archivedResultSheetEntries.archivedSheetId, archivedSheetIds));
+        await db.delete(archivedResultSheets).where(inArray(archivedResultSheets.id, archivedSheetIds));
+      }
+      throw error;
     }
-    
-    // Delete entries and sheets after archiving
-    await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, ids));
-    await db.delete(resultSheets).where(inArray(resultSheets.id, ids));
   }
 
-  async deleteResults(ids: string[]): Promise<void> {
-    if (ids.length === 0) return;
-    await db.delete(results).where(inArray(results.id, ids));
-  }
-
-  async archiveResults(ids: string[], archivedBy: string): Promise<void> {
+  async deleteResults(ids: string[], schoolId: string): Promise<void> {
     if (ids.length === 0) return;
     
-    // Get the results to archive
-    const resultsToArchive = await db.select().from(results).where(inArray(results.id, ids));
+    // Filter by schoolId for multi-tenant isolation
+    await db.delete(results)
+      .where(and(
+        inArray(results.id, ids),
+        eq(results.schoolId, schoolId)
+      ));
+  }
+
+  async archiveResults(ids: string[], schoolId: string, archivedBy: string): Promise<void> {
+    if (ids.length === 0) return;
+    
+    // Get the results to archive - MUST filter by schoolId for multi-tenant isolation
+    const resultsToArchive = await db.select().from(results)
+      .where(and(
+        inArray(results.id, ids),
+        eq(results.schoolId, schoolId)
+      ));
+    
+    if (resultsToArchive.length === 0) return;
+    
+    const originalIds = resultsToArchive.map(r => r.id);
     
     for (const result of resultsToArchive) {
       // Insert into archived table
@@ -1006,8 +1051,8 @@ export class DatabaseStorage implements IStorage {
       });
     }
     
-    // Delete results after archiving
-    await db.delete(results).where(inArray(results.id, ids));
+    // Delete results after archiving - use filtered IDs
+    await db.delete(results).where(inArray(results.id, originalIds));
   }
 }
 
