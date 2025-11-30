@@ -174,6 +174,9 @@ export interface IStorage {
   archiveResultSheets(ids: string[], schoolId: string, archivedBy: string): Promise<void>;
   deleteResults(ids: string[], schoolId: string): Promise<void>;
   archiveResults(ids: string[], schoolId: string, archivedBy: string): Promise<void>;
+
+  // Position Calculation
+  calculateAndUpdatePositions(schoolId: string, session: string, term: string, classId?: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1259,6 +1262,79 @@ export class DatabaseStorage implements IStorage {
     
     // Delete results after archiving - use filtered IDs
     await db.delete(results).where(inArray(results.id, originalIds));
+  }
+
+  // Position Calculation
+  async calculateAndUpdatePositions(schoolId: string, session: string, term: string, classId?: string): Promise<number> {
+    // Get all results for the given school, session, term (optionally filtered by class)
+    const conditions = [
+      eq(results.schoolId, schoolId),
+      eq(results.session, session),
+      eq(results.term, term),
+    ];
+    
+    if (classId) {
+      conditions.push(eq(results.class, classId));
+    }
+    
+    const allResults = await db.select().from(results).where(and(...conditions));
+    
+    if (allResults.length === 0) return 0;
+    
+    // Group results by class
+    type ResultItem = typeof allResults[number];
+    const resultsByClass: Record<string, ResultItem[]> = {};
+    for (const result of allResults) {
+      const classKey = result.class || 'unknown';
+      if (!resultsByClass[classKey]) {
+        resultsByClass[classKey] = [];
+      }
+      resultsByClass[classKey].push(result);
+    }
+    
+    let updatedCount = 0;
+    
+    // Calculate positions within each class
+    for (const classKey of Object.keys(resultsByClass)) {
+      const classResults = resultsByClass[classKey];
+      
+      // Sort by average score descending
+      classResults.sort((a: ResultItem, b: ResultItem) => {
+        const avgA = parseFloat(a.averageScore || '0');
+        const avgB = parseFloat(b.averageScore || '0');
+        return avgB - avgA;
+      });
+      
+      const totalStudentsCount = classResults.length;
+      let currentPosition = 1;
+      let previousAverage: number | null = null;
+      
+      for (let i = 0; i < classResults.length; i++) {
+        const result = classResults[i];
+        const currentAverage = parseFloat(result.averageScore || '0');
+        
+        if (previousAverage !== null && currentAverage === previousAverage) {
+          // Same average as previous, keep same position
+        } else {
+          // Different average, update position
+          currentPosition = i + 1;
+        }
+        
+        previousAverage = currentAverage;
+        
+        // Update the result with position and total students
+        await db.update(results)
+          .set({ 
+            position: currentPosition,
+            totalStudents: totalStudentsCount
+          })
+          .where(eq(results.id, result.id));
+        
+        updatedCount++;
+      }
+    }
+    
+    return updatedCount;
   }
 }
 

@@ -1344,6 +1344,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== POSITION CALCULATION ROUTES =====
+  app.post("/api/results/calculate-positions", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const schoolId = req.user!.schoolId;
+      if (!schoolId) {
+        return res.status(403).json({ message: "School association required" });
+      }
+
+      const { session, term, classId } = req.body;
+      
+      if (!session || !term) {
+        return res.status(400).json({ message: "Session and term are required" });
+      }
+
+      // Check school's computation mode
+      const school = await storage.getSchool(schoolId);
+      const computationMode = school?.computationMode || 'total_average_only';
+      
+      // Only calculate positions if computation mode includes positions
+      if (computationMode === 'total_average_only') {
+        return res.status(400).json({ 
+          message: "Position calculation is disabled. Update computation mode to include positions." 
+        });
+      }
+
+      const updatedCount = await storage.calculateAndUpdatePositions(schoolId, session, term, classId);
+      
+      res.json({ 
+        message: `Positions calculated for ${updatedCount} results`,
+        updatedCount 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ===== USERS ROUTES =====
   app.get("/api/users", authenticate, authorize("super_admin", "school_admin"), async (req: AuthRequest, res) => {
     try {
