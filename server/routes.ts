@@ -954,6 +954,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Re-aggregate all result sheets for a session/term (school admin)
+  // This fixes data where sheets were approved before the incremental merge was implemented
+  app.post("/api/results/reaggregate", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      const { session, term } = req.body;
+      if (!session || !term) {
+        return res.status(400).json({ message: "Session and term are required" });
+      }
+
+      const schoolId = req.user!.schoolId!;
+
+      // Use storage method to safely re-aggregate
+      const sheetsProcessed = await storage.reaggregateResults(schoolId, session, term);
+
+      if (sheetsProcessed === 0) {
+        return res.status(400).json({ message: "No approved or published sheets found for this session/term" });
+      }
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: "reaggregate_results",
+        resource: "results",
+        resourceId: schoolId,
+        details: { session, term, sheetsProcessed },
+      });
+
+      res.json({ 
+        message: `Successfully re-aggregated ${sheetsProcessed} result sheets`,
+        sheetsProcessed
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Reject result sheet (school admin)
   app.patch("/api/result-sheets/:id/reject", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
     try {

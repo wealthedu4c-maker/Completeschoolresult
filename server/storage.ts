@@ -167,6 +167,7 @@ export interface IStorage {
   // Aggregation
   aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void>;
   mergeSheetIntoStudentResults(sheetId: string): Promise<void>;
+  reaggregateResults(schoolId: string, session: string, term: string): Promise<number>;
 
   // Delete & Archive Operations - schoolId required for multi-tenant isolation
   deleteResultSheets(ids: string[], schoolId: string): Promise<void>;
@@ -1009,6 +1010,105 @@ export class DatabaseStorage implements IStorage {
         });
       }
     }
+  }
+
+  // Re-aggregate results by merging all approved/published sheets for a session/term
+  // This preserves existing result metadata while updating subject scores
+  async reaggregateResults(schoolId: string, session: string, term: string): Promise<number> {
+    // Get all approved or published sheets for this session/term
+    const sheetsToMerge = await db.select()
+      .from(resultSheets)
+      .where(and(
+        eq(resultSheets.schoolId, schoolId),
+        eq(resultSheets.session, session),
+        eq(resultSheets.term, term),
+        inArray(resultSheets.status, ["approved", "published"])
+      ));
+
+    if (sheetsToMerge.length === 0) {
+      return 0;
+    }
+
+    // Get all student IDs that will be affected
+    const sheetIds = sheetsToMerge.map(s => s.id);
+    const allEntries = await db.select()
+      .from(resultSheetEntries)
+      .where(inArray(resultSheetEntries.sheetId, sheetIds));
+
+    const affectedStudentIds = Array.from(new Set(allEntries.map(e => e.studentId)));
+
+    // For each affected student, rebuild their subjects array from approved sheets
+    for (const studentId of affectedStudentIds) {
+      // Get existing result to preserve metadata (comments, etc.)
+      const existingResult = await this.getResultByStudentSessionTerm(studentId, session, term);
+
+      // Build subjects array from all approved sheets
+      const studentEntries = allEntries.filter(e => e.studentId === studentId);
+      const subjectsMap = new Map<string, any>();
+
+      for (const entry of studentEntries) {
+        const sheet = sheetsToMerge.find(s => s.id === entry.sheetId);
+        if (!sheet) continue;
+
+        const subject = await this.getSubject(sheet.subjectId);
+        const subjectName = subject?.name || "Unknown Subject";
+
+        subjectsMap.set(sheet.subjectId, {
+          subject: subjectName,
+          subjectId: sheet.subjectId,
+          ca1: parseFloat(entry.ca1) || 0,
+          ca2: parseFloat(entry.ca2) || 0,
+          exam: parseFloat(entry.exam) || 0,
+          total: parseFloat(entry.total) || 0,
+          grade: entry.grade || "",
+          remark: entry.remark || "",
+          sheetId: entry.sheetId,
+        });
+      }
+
+      const subjectScores = Array.from(subjectsMap.values());
+      const totalScore = subjectScores.reduce((sum, s) => sum + s.total, 0);
+      const averageScore = subjectScores.length > 0 ? totalScore / subjectScores.length : 0;
+
+      // Get class name from first sheet
+      const firstSheet = sheetsToMerge.find(s => 
+        allEntries.some(e => e.sheetId === s.id && e.studentId === studentId)
+      );
+      const classInfo = firstSheet ? await this.getClass(firstSheet.classId) : null;
+      const className = classInfo?.name || existingResult?.class || "";
+
+      if (existingResult) {
+        // Update existing result, preserving comments and other metadata
+        await db.update(results)
+          .set({
+            subjects: subjectScores,
+            totalScore: totalScore.toFixed(2),
+            averageScore: averageScore.toFixed(2),
+            class: className,
+            updatedAt: new Date(),
+          })
+          .where(eq(results.id, existingResult.id));
+      } else {
+        // Create new result
+        const student = await this.getStudent(studentId);
+        if (!student) continue;
+
+        await db.insert(results).values({
+          schoolId,
+          studentId,
+          session,
+          term: term as "First" | "Second" | "Third",
+          class: className,
+          subjects: subjectScores,
+          totalScore: totalScore.toFixed(2),
+          averageScore: averageScore.toFixed(2),
+          status: "approved",
+          uploadedBy: sheetsToMerge[0].submittedBy,
+        });
+      }
+    }
+
+    return sheetsToMerge.length;
   }
 
   // Delete & Archive Operations - MUST include schoolId for multi-tenant isolation
