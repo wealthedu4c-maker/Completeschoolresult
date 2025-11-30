@@ -51,6 +51,8 @@ export const schools = pgTable("schools", {
   logo: text("logo"),
   motto: text("motto"),
   isActive: boolean("is_active").default(false).notNull(),
+  gradeRanges: jsonb("grade_ranges"), // [{grade: "A", minScore: 70, maxScore: 100, remark: "Excellent"}, ...]
+  computationMode: varchar("computation_mode", { length: 30 }).default("total_average_only"), // 'total_average_only', 'position_average_only', 'total_average_position'
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -310,7 +312,6 @@ export const scoreMetrics = pgTable("score_metrics", {
   schoolId: uuid("school_id").notNull(),
   name: varchar("name", { length: 100 }).notNull(), // e.g., "CA1", "Assessment", "Project", "Exam"
   maxScore: integer("max_score").notNull(), // Maximum score for this metric
-  weight: decimal("weight", { precision: 5, scale: 2 }).default("1").notNull(), // Weight for calculation
   order: integer("order").default(0).notNull(), // Display order
   isActive: boolean("is_active").default(true).notNull(),
   createdBy: uuid("created_by").notNull(),
@@ -545,10 +546,20 @@ export const insertUserSchema = createInsertSchema(users, {
   role: z.enum(["super_admin", "school_admin", "teacher"]),
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
+// Grade range configuration schema
+export const gradeRangeSchema = z.object({
+  grade: z.string().min(1),
+  minScore: z.number().min(0).max(100),
+  maxScore: z.number().min(0).max(100),
+  remark: z.string().min(1),
+});
+
 export const insertSchoolSchema = createInsertSchema(schools, {
   name: z.string().min(1),
   code: z.string().min(1).toUpperCase(),
   email: z.string().email(),
+  gradeRanges: z.array(gradeRangeSchema).optional(),
+  computationMode: z.enum(["total_average_only", "position_average_only", "total_average_position"]).optional(),
 }).omit({ id: true, createdAt: true, updatedAt: true });
 
 export const insertStudentSchema = createInsertSchema(students, {
@@ -656,3 +667,17 @@ export type InsertResultSheetEntry = z.infer<typeof insertResultSheetEntrySchema
 export type ArchivedResultSheet = typeof archivedResultSheets.$inferSelect;
 export type ArchivedResultSheetEntry = typeof archivedResultSheetEntries.$inferSelect;
 export type ArchivedResult = typeof archivedResults.$inferSelect;
+
+// Grade configuration types
+export type GradeRange = z.infer<typeof gradeRangeSchema>;
+export type ComputationMode = "total_average_only" | "position_average_only" | "total_average_position";
+
+// Default grade ranges for backward compatibility
+export const DEFAULT_GRADE_RANGES: GradeRange[] = [
+  { grade: "A", minScore: 70, maxScore: 100, remark: "Excellent" },
+  { grade: "B", minScore: 60, maxScore: 69, remark: "Very Good" },
+  { grade: "C", minScore: 50, maxScore: 59, remark: "Good" },
+  { grade: "D", minScore: 40, maxScore: 49, remark: "Fair" },
+  { grade: "E", minScore: 30, maxScore: 39, remark: "Pass" },
+  { grade: "F", minScore: 0, maxScore: 29, remark: "Fail" },
+];
