@@ -246,64 +246,47 @@ export function SpreadsheetResultUpload({ open, onOpenChange }: SpreadsheetResul
     setLoadingAction(submitAfterSave ? "submit" : "draft");
 
     try {
-      let successCount = 0;
-      let errorCount = 0;
+      const entries = studentsWithScores.map((score) => ({
+        studentId: score.studentId,
+        ca1: String(score.ca1),
+        ca2: String(score.ca2),
+        exam: String(score.exam),
+      }));
 
-      for (const studentScore of studentsWithScores) {
-        try {
-          const response = await apiRequest("POST", "/api/results", {
-            schoolId: user.schoolId,
-            studentId: studentScore.studentId,
-            session,
-            term,
-            class: selectedClass.name,
-            subjects: [{
-              subject: selectedSubject.name,
-              ca1: studentScore.ca1,
-              ca2: studentScore.ca2,
-              exam: studentScore.exam,
-            }],
-            status: "draft",
-          });
+      const response = await apiRequest("POST", "/api/result-sheets", {
+        classId: selectedClassId,
+        subjectId: selectedSubjectId,
+        session,
+        term,
+        entries,
+      });
 
-          const result = await response.json();
+      const sheetData = await response.json();
 
-          if (submitAfterSave && result.id) {
-            await apiRequest("POST", `/api/results/${result.id}/submit`);
-          }
-          
-          successCount++;
-        } catch (error) {
-          errorCount++;
-          console.error(`Failed to save result for student ${studentScore.studentName}:`, error);
-        }
-      }
-
-      if (successCount > 0) {
+      if (submitAfterSave && sheetData.sheet?.id) {
+        await apiRequest("PATCH", `/api/result-sheets/${sheetData.sheet.id}/submit`);
         toast({
-          title: submitAfterSave ? "Results Submitted" : "Drafts Saved",
-          description: `Successfully ${submitAfterSave ? "submitted" : "saved"} ${successCount} result(s)${errorCount > 0 ? `. ${errorCount} failed.` : ""}`,
+          title: "Result Sheet Submitted",
+          description: `Successfully submitted result sheet for ${selectedClass.name} - ${selectedSubject.name} with ${studentsWithScores.length} student scores`,
         });
       } else {
         toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to save any results",
+          title: "Draft Saved",
+          description: `Successfully saved result sheet draft for ${selectedClass.name} - ${selectedSubject.name}`,
         });
       }
 
+      queryClient.invalidateQueries({ queryKey: ["/api/result-sheets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/results"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
 
-      if (successCount > 0) {
-        resetDialog();
-        onOpenChange(false);
-      }
+      resetDialog();
+      onOpenChange(false);
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: submitAfterSave ? "Submit Failed" : "Save Failed",
-        description: error.message,
+        description: error.message || "An error occurred",
       });
     } finally {
       setLoading(false);
