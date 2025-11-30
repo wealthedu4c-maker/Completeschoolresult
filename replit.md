@@ -86,6 +86,16 @@ Preferred communication style: Simple, everyday language.
 - PIN Request Approval with Limits: Set max usage count when approving PIN requests
 - PIN Statistics: Dashboard shows Available vs Exhausted PINs based on remaining usage capacity
 
+**Result Sheets Workflow (Nov 2025)**
+- Class-Subject Sheet Model: Teachers submit entire class results for one subject at a time (result sheets)
+- Result Sheets Page: Tabbed interface with "Result Sheets" tab for admin approval and "Student Results" tab for aggregated results
+- SpreadsheetResultUpload Component: Refactored to create result sheets via POST /api/result-sheets instead of individual results
+- Sheet Approval Flow: School admins can view sheet details, approve (triggers aggregation), or reject with reason
+- Automatic Aggregation: Approved subject sheets merge into per-student results with calculated totals, grades, and remarks
+- Sheet Status Workflow: draft → submitted → approved/rejected (approved sheets aggregate, rejected sheets can be edited and resubmitted)
+- Result Sheet Details Dialog: View all student entries with CA1, CA2, Exam, Total, and Grade columns
+- Pending Badge: Result Sheets tab shows count of pending sheets awaiting approval
+
 ### Backend Architecture
 
 **Server Framework**
@@ -97,8 +107,9 @@ Preferred communication style: Simple, everyday language.
 **API Design Pattern**
 - RESTful conventions with resource-based endpoints
 - Authentication endpoints: `/api/auth/login`, `/api/auth/register`
-- Resource endpoints: `/api/schools`, `/api/students`, `/api/results`, `/api/pins`, `/api/users`, `/api/classes`, `/api/subjects`, `/api/pin-requests`
+- Resource endpoints: `/api/schools`, `/api/students`, `/api/results`, `/api/pins`, `/api/users`, `/api/classes`, `/api/subjects`, `/api/pin-requests`, `/api/result-sheets`
 - Action endpoints: `/api/pin-requests/:id/approve`, `/api/pin-requests/:id/reject`, `/api/results/:id/approve`, `/api/results/:id/reject`, `/api/results/:id/comment`
+- Result sheet actions: `/api/result-sheets/:id/submit`, `/api/result-sheets/:id/approve`, `/api/result-sheets/:id/reject`
 - Utility endpoints: `/api/analytics/dashboard` for dashboard statistics, `/api/schools/me` for current user's school
 - Public endpoints: `/api/public/check-result` (PIN-based result lookup), `/api/public/register-school` (school registration)
 - Bulk upload endpoints: `/api/students/bulk`, `/api/results/bulk`
@@ -136,6 +147,8 @@ Preferred communication style: Simple, everyday language.
 - **schools**: School profiles with metadata (name, code, subdomain, address, logo, motto)
 - **students**: Student records linked to schools with admission numbers and class information
 - **results**: Academic results with draft→submitted→approved→published workflow and subject scores array
+- **resultSheets**: Teacher-submitted result sheets for a class+subject combination per session/term
+- **resultSheetEntries**: Individual student scores within a result sheet (CA1, CA2, Exam, Total, Grade)
 - **pins**: One-time use PINs for result checking with expiry, usage tracking, and attempt limits
 - **pinRequests**: School admin requests for PINs, processed by super admin
 - **classes**: Class/grade definitions per academic year
