@@ -2,32 +2,30 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticate, authorize, JWT_SECRET, type AuthRequest } from "./middleware/auth";
-import { calculateResults, generatePIN } from "./utils/result-calculator";
+import { calculateResults, generatePIN, getGradeAndRemark } from "./utils/result-calculator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema, insertResultSheetSchema, insertResultSheetEntrySchema } from "@shared/schema";
+import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema, insertResultSheetSchema, insertResultSheetEntrySchema, GradeRange, DEFAULT_GRADE_RANGES, gradeRangeSchema } from "@shared/schema";
 import { z } from "zod";
 
-// Helper functions for grade calculation
-function calculateGrade(total: number): string {
-  if (total >= 70) return "A";
-  if (total >= 60) return "B";
-  if (total >= 50) return "C";
-  if (total >= 40) return "D";
-  if (total >= 30) return "E";
-  return "F";
+// Helper function to get school's grade configuration
+async function getSchoolGradeRanges(schoolId: string): Promise<GradeRange[]> {
+  const school = await storage.getSchool(schoolId);
+  if (school?.gradeRanges && Array.isArray(school.gradeRanges) && school.gradeRanges.length > 0) {
+    return school.gradeRanges as GradeRange[];
+  }
+  return DEFAULT_GRADE_RANGES;
 }
 
-function getGradeRemark(grade: string): string {
-  const remarks: Record<string, string> = {
-    "A": "Excellent",
-    "B": "Very Good",
-    "C": "Good",
-    "D": "Fair",
-    "E": "Pass",
-    "F": "Fail",
-  };
-  return remarks[grade] || "N/A";
+// Legacy helper functions - now use configurable grade ranges
+function calculateGrade(total: number, gradeRanges?: GradeRange[]): string {
+  const { grade } = getGradeAndRemark(total, gradeRanges);
+  return grade;
+}
+
+function getGradeRemarkFromTotal(total: number, gradeRanges?: GradeRange[]): string {
+  const { remark } = getGradeAndRemark(total, gradeRanges);
+  return remark;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -185,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // School admin can update their own school (logo, motto, address, phone)
+  // School admin can update their own school (logo, motto, address, phone, gradeRanges, computationMode)
   app.patch("/api/schools/:id", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
     try {
       // Verify school belongs to user
@@ -194,13 +192,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only allow specific fields to be updated by school admin
-      const { logo, motto, address, phone } = req.body;
+      const { logo, motto, address, phone, gradeRanges, computationMode } = req.body;
       const updateData: any = {};
       
       if (logo !== undefined) updateData.logo = logo;
       if (motto !== undefined) updateData.motto = motto;
       if (address !== undefined) updateData.address = address;
       if (phone !== undefined) updateData.phone = phone;
+      if (gradeRanges !== undefined) {
+        // Validate grade ranges
+        if (Array.isArray(gradeRanges)) {
+          const validRanges = gradeRanges.every((r: any) => 
+            r.grade && typeof r.minScore === 'number' && typeof r.maxScore === 'number' && r.remark
+          );
+          if (validRanges) {
+            updateData.gradeRanges = gradeRanges;
+          }
+        }
+      }
+      if (computationMode !== undefined) {
+        if (['total_average_only', 'position_average_only', 'total_average_position'].includes(computationMode)) {
+          updateData.computationMode = computationMode;
+        }
+      }
 
       if (Object.keys(updateData).length === 0) {
         return res.status(400).json({ message: "No valid fields to update" });
@@ -210,6 +224,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(school);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Update school's grade configuration (dedicated endpoint)
+  app.patch("/api/schools/:id/grading", authenticate, authorize("school_admin"), async (req: AuthRequest, res) => {
+    try {
+      // Verify school belongs to user
+      if (req.params.id !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Cannot update other schools" });
+      }
+
+      const { gradeRanges, computationMode } = req.body;
+      const updateData: any = {};
+
+      // Validate grade ranges
+      if (gradeRanges !== undefined) {
+        if (!Array.isArray(gradeRanges)) {
+          return res.status(400).json({ message: "gradeRanges must be an array" });
+        }
+        for (const range of gradeRanges) {
+          const result = gradeRangeSchema.safeParse(range);
+          if (!result.success) {
+            return res.status(400).json({ message: `Invalid grade range: ${result.error.message}` });
+          }
+        }
+        updateData.gradeRanges = gradeRanges;
+      }
+
+      // Validate computation mode
+      if (computationMode !== undefined) {
+        if (!['total_average_only', 'position_average_only', 'total_average_position'].includes(computationMode)) {
+          return res.status(400).json({ 
+            message: "computationMode must be one of: total_average_only, position_average_only, total_average_position" 
+          });
+        }
+        updateData.computationMode = computationMode;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
+
+      const school = await storage.updateSchool(req.params.id, updateData);
+      res.json({
+        gradeRanges: school.gradeRanges || DEFAULT_GRADE_RANGES,
+        computationMode: school.computationMode || 'total_average_only'
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Get school's grade configuration
+  app.get("/api/schools/:id/grading", authenticate, async (req: AuthRequest, res) => {
+    try {
+      // Verify user has access to this school
+      if (req.user!.role !== 'super_admin' && req.params.id !== req.user!.schoolId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const school = await storage.getSchool(req.params.id);
+      if (!school) {
+        return res.status(404).json({ message: "School not found" });
+      }
+
+      res.json({
+        gradeRanges: school.gradeRanges || DEFAULT_GRADE_RANGES,
+        computationMode: school.computationMode || 'total_average_only'
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
@@ -371,8 +456,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Student not found or belongs to another school" });
       }
       
-      // Auto-calculate grades and totals
-      const calculated = calculateResults(validated.subjects);
+      // Get school's grade configuration
+      const gradeRanges = await getSchoolGradeRanges(req.user!.schoolId!);
+      
+      // Auto-calculate grades and totals using school's grade config
+      const calculated = calculateResults(validated.subjects, gradeRanges);
 
       const result = await storage.createResult({
         ...validated,
@@ -1812,6 +1900,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "School association required" });
       }
 
+      // Get school's grade configuration
+      const gradeRanges = await getSchoolGradeRanges(schoolId);
+
       const uploadResults = {
         success: 0,
         failed: 0,
@@ -1849,7 +1940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          // Process subjects - calculate totals and grades
+          // Process subjects - calculate totals and grades using school config
           const subjectsInput = row.subjects?.map((subj: any) => ({
             subject: subj.subject,
             ca1: Number(subj.ca1) || 0,
@@ -1857,7 +1948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             exam: Number(subj.exam) || 0,
           })) || [];
           
-          const calculated = calculateResults(subjectsInput);
+          const calculated = calculateResults(subjectsInput, gradeRanges);
           const subjects = calculated.subjects;
 
           const totalScore = subjects.reduce((sum: number, s: any) => sum + s.total, 0);
@@ -1918,13 +2009,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "School association required" });
       }
 
-      const { name, maxScore, weight, order } = req.body;
+      const { name, maxScore, order } = req.body;
       
       const metric = await storage.createScoreMetric({
         schoolId,
         name,
         maxScore: Number(maxScore),
-        weight: String(weight || 1),
         order: Number(order || 0),
         createdBy: req.user!.id,
       });

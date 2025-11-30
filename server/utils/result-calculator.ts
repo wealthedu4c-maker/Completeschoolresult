@@ -1,5 +1,8 @@
+import { GradeRange, DEFAULT_GRADE_RANGES } from "@shared/schema";
+
 interface SubjectScore {
   subject: string;
+  subjectId?: string;
   ca1: number;
   ca2: number;
   exam: number;
@@ -8,7 +11,25 @@ interface SubjectScore {
   remark?: string;
 }
 
-export function calculateResults(subjects: SubjectScore[]): {
+export function getGradeAndRemark(
+  total: number,
+  gradeRanges?: GradeRange[] | null
+): { grade: string; remark: string } {
+  const ranges = gradeRanges && gradeRanges.length > 0 ? gradeRanges : DEFAULT_GRADE_RANGES;
+  
+  for (const range of ranges) {
+    if (total >= range.minScore && total <= range.maxScore) {
+      return { grade: range.grade, remark: range.remark };
+    }
+  }
+  
+  return { grade: "F", remark: "Fail" };
+}
+
+export function calculateResults(
+  subjects: SubjectScore[],
+  gradeRanges?: GradeRange[] | null
+): {
   subjects: SubjectScore[];
   totalScore: number;
   averageScore: number;
@@ -16,23 +37,8 @@ export function calculateResults(subjects: SubjectScore[]): {
   let totalScore = 0;
 
   const calculatedSubjects = subjects.map((subject) => {
-    // Calculate total for each subject
     const total = (subject.ca1 || 0) + (subject.ca2 || 0) + (subject.exam || 0);
-
-    // Calculate grade
-    let grade = "F";
-    if (total >= 80) grade = "A";
-    else if (total >= 70) grade = "B";
-    else if (total >= 60) grade = "C";
-    else if (total >= 50) grade = "D";
-    else if (total >= 40) grade = "E";
-
-    // Calculate remark
-    let remark = "Poor";
-    if (total >= 70) remark = "Excellent";
-    else if (total >= 60) remark = "Very Good";
-    else if (total >= 50) remark = "Good";
-    else if (total >= 40) remark = "Fair";
+    const { grade, remark } = getGradeAndRemark(total, gradeRanges);
 
     totalScore += total;
 
