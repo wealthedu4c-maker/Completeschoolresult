@@ -14,6 +14,9 @@ import {
   notifications,
   resultSheets,
   resultSheetEntries,
+  archivedResultSheets,
+  archivedResultSheetEntries,
+  archivedResults,
   type User, 
   type InsertUser,
   type School,
@@ -163,6 +166,12 @@ export interface IStorage {
 
   // Aggregation
   aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void>;
+
+  // Delete & Archive Operations
+  deleteResultSheets(ids: string[]): Promise<void>;
+  archiveResultSheets(ids: string[], archivedBy: string): Promise<void>;
+  deleteResults(ids: string[]): Promise<void>;
+  archiveResults(ids: string[], archivedBy: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -894,6 +903,111 @@ export class DatabaseStorage implements IStorage {
         .set({ status: "published", updatedAt: new Date() })
         .where(eq(resultSheets.id, sheet.id));
     }
+  }
+
+  // Delete & Archive Operations
+  async deleteResultSheets(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    
+    // First delete all entries for these sheets
+    await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, ids));
+    
+    // Then delete the sheets
+    await db.delete(resultSheets).where(inArray(resultSheets.id, ids));
+  }
+
+  async archiveResultSheets(ids: string[], archivedBy: string): Promise<void> {
+    if (ids.length === 0) return;
+    
+    // Get the sheets to archive
+    const sheetsToArchive = await db.select().from(resultSheets).where(inArray(resultSheets.id, ids));
+    
+    for (const sheet of sheetsToArchive) {
+      // Insert into archived table
+      const [archivedSheet] = await db.insert(archivedResultSheets).values({
+        originalId: sheet.id,
+        schoolId: sheet.schoolId,
+        classId: sheet.classId,
+        subjectId: sheet.subjectId,
+        session: sheet.session,
+        term: sheet.term,
+        status: sheet.status,
+        submittedBy: sheet.submittedBy,
+        submittedAt: sheet.submittedAt,
+        approvedBy: sheet.approvedBy,
+        approvedAt: sheet.approvedAt,
+        rejectionReason: sheet.rejectionReason,
+        originalCreatedAt: sheet.createdAt,
+        archivedBy,
+      }).returning();
+      
+      // Get and archive entries
+      const entries = await db.select().from(resultSheetEntries).where(eq(resultSheetEntries.sheetId, sheet.id));
+      
+      if (entries.length > 0) {
+        await db.insert(archivedResultSheetEntries).values(
+          entries.map(entry => ({
+            originalId: entry.id,
+            archivedSheetId: archivedSheet.id,
+            studentId: entry.studentId,
+            ca1: entry.ca1,
+            ca2: entry.ca2,
+            exam: entry.exam,
+            total: entry.total,
+            grade: entry.grade,
+            remark: entry.remark,
+            originalCreatedAt: entry.createdAt,
+          }))
+        );
+      }
+    }
+    
+    // Delete entries and sheets after archiving
+    await db.delete(resultSheetEntries).where(inArray(resultSheetEntries.sheetId, ids));
+    await db.delete(resultSheets).where(inArray(resultSheets.id, ids));
+  }
+
+  async deleteResults(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.delete(results).where(inArray(results.id, ids));
+  }
+
+  async archiveResults(ids: string[], archivedBy: string): Promise<void> {
+    if (ids.length === 0) return;
+    
+    // Get the results to archive
+    const resultsToArchive = await db.select().from(results).where(inArray(results.id, ids));
+    
+    for (const result of resultsToArchive) {
+      // Insert into archived table
+      await db.insert(archivedResults).values({
+        originalId: result.id,
+        schoolId: result.schoolId,
+        studentId: result.studentId,
+        session: result.session,
+        term: result.term,
+        class: result.class,
+        subjects: result.subjects,
+        totalScore: result.totalScore,
+        averageScore: result.averageScore,
+        position: result.position,
+        totalStudents: result.totalStudents,
+        teacherComment: result.teacherComment,
+        principalComment: result.principalComment,
+        attendance: result.attendance,
+        status: result.status,
+        publishedAt: result.publishedAt,
+        approvedBy: result.approvedBy,
+        approvedAt: result.approvedAt,
+        rejectionReason: result.rejectionReason,
+        uploadedBy: result.uploadedBy,
+        originalCreatedAt: result.createdAt,
+        archivedBy,
+      });
+    }
+    
+    // Delete results after archiving
+    await db.delete(results).where(inArray(results.id, ids));
   }
 }
 
