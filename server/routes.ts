@@ -542,6 +542,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk actions for student results (delete/archive)
+  app.post("/api/results/bulk-action", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
+    try {
+      const { ids, action } = req.body;
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "No results selected" });
+      }
+      
+      if (!["delete", "archive"].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
+      }
+      
+      // Verify all results belong to user's school
+      for (const id of ids) {
+        const result = await storage.getResult(id);
+        if (!result) {
+          return res.status(404).json({ message: `Result ${id} not found` });
+        }
+        if (req.user!.role !== "super_admin" && result.schoolId !== req.user!.schoolId) {
+          return res.status(403).json({ message: "Cannot modify results from other schools" });
+        }
+      }
+      
+      if (action === "delete") {
+        await storage.deleteResults(ids);
+      } else {
+        await storage.archiveResults(ids, req.user!.id);
+      }
+      
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: `bulk_${action}_results`,
+        resource: "result",
+        details: { ids, count: ids.length },
+      });
+      
+      res.json({ message: `Successfully ${action}d ${ids.length} result(s)` });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ===== RESULT SHEETS ROUTES =====
   // List result sheets (teachers see their own, admins see all for their school)
   app.get("/api/result-sheets", authenticate, async (req: AuthRequest, res) => {
@@ -957,6 +1001,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.deleteResultSheet(sheet.id);
       res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk actions for result sheets (delete/archive)
+  app.post("/api/result-sheets/bulk-action", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
+    try {
+      const { ids, action } = req.body;
+      
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "No result sheets selected" });
+      }
+      
+      if (!["delete", "archive"].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
+      }
+      
+      // Verify all sheets belong to user's school
+      for (const id of ids) {
+        const sheet = await storage.getResultSheet(id);
+        if (!sheet) {
+          return res.status(404).json({ message: `Result sheet ${id} not found` });
+        }
+        if (req.user!.role !== "super_admin" && sheet.schoolId !== req.user!.schoolId) {
+          return res.status(403).json({ message: "Cannot modify result sheets from other schools" });
+        }
+      }
+      
+      if (action === "delete") {
+        await storage.deleteResultSheets(ids);
+      } else {
+        await storage.archiveResultSheets(ids, req.user!.id);
+      }
+      
+      // Create audit log
+      await storage.createAuditLog({
+        userId: req.user!.id,
+        action: `bulk_${action}_result_sheets`,
+        resource: "result_sheet",
+        details: { ids, count: ids.length },
+      });
+      
+      res.json({ message: `Successfully ${action}d ${ids.length} result sheet(s)` });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
