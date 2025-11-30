@@ -91,10 +91,12 @@ Preferred communication style: Simple, everyday language.
 - Result Sheets Page: Tabbed interface with "Result Sheets" tab for admin approval and "Student Results" tab for aggregated results
 - SpreadsheetResultUpload Component: Refactored to create result sheets via POST /api/result-sheets instead of individual results
 - Sheet Approval Flow: School admins can view sheet details, approve (triggers aggregation), or reject with reason
-- Automatic Aggregation: Approved subject sheets merge into per-student results with calculated totals, grades, and remarks
-- Sheet Status Workflow: draft → submitted → approved/rejected (approved sheets aggregate, rejected sheets can be edited and resubmitted)
+- Incremental Aggregation: When admin approves a sheet, `mergeSheetIntoStudentResults(sheetId)` merges that sheet's subject scores into each student's existing result record, preserving prior subjects and recalculating totals/averages
+- Subject Stacking: Each student's result accumulates subjects gradually as more sheets are approved; existing subject entries are updated, new ones are appended
+- Sheet Status Workflow: draft → submitted → approved/rejected (approved sheets trigger incremental merge, rejected sheets can be edited and resubmitted)
 - Result Sheet Details Dialog: View all student entries with CA1, CA2, Exam, Total, and Grade columns
 - Pending Badge: Result Sheets tab shows count of pending sheets awaiting approval
+- Teacher Data Isolation: Teachers only see their own result sheets (filtered by submittedBy); cache is cleared on login/logout to prevent cross-user data leaks
 
 **Delete & Archive Features (Nov 2025)**
 - Delete & Archive Actions: School admins can delete or archive result sheets and student results
