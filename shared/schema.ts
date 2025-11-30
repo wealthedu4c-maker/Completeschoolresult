@@ -465,6 +465,77 @@ export const resultSheetEntriesRelations = relations(resultSheetEntries, ({ one 
   }),
 }));
 
+// ===== ARCHIVED RESULT SHEETS TABLE =====
+export const archivedResultSheets = pgTable("archived_result_sheets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalId: uuid("original_id").notNull(),
+  schoolId: uuid("school_id").notNull(),
+  classId: uuid("class_id").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  term: varchar("term", { length: 20 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull(),
+  submittedBy: uuid("submitted_by").notNull(),
+  submittedAt: timestamp("submitted_at"),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  originalCreatedAt: timestamp("original_created_at").notNull(),
+  archivedAt: timestamp("archived_at").defaultNow().notNull(),
+  archivedBy: uuid("archived_by").notNull(),
+}, (table) => ({
+  schoolIdx: index("archived_result_sheets_school_idx").on(table.schoolId),
+  archivedAtIdx: index("archived_result_sheets_archived_at_idx").on(table.archivedAt),
+}));
+
+// ===== ARCHIVED RESULT SHEET ENTRIES TABLE =====
+export const archivedResultSheetEntries = pgTable("archived_result_sheet_entries", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalId: uuid("original_id").notNull(),
+  archivedSheetId: uuid("archived_sheet_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  ca1: decimal("ca1", { precision: 5, scale: 2 }).default("0").notNull(),
+  ca2: decimal("ca2", { precision: 5, scale: 2 }).default("0").notNull(),
+  exam: decimal("exam", { precision: 5, scale: 2 }).default("0").notNull(),
+  total: decimal("total", { precision: 5, scale: 2 }).default("0").notNull(),
+  grade: varchar("grade", { length: 5 }),
+  remark: varchar("remark", { length: 50 }),
+  originalCreatedAt: timestamp("original_created_at").notNull(),
+}, (table) => ({
+  archivedSheetIdx: index("archived_result_sheet_entries_sheet_idx").on(table.archivedSheetId),
+}));
+
+// ===== ARCHIVED RESULTS TABLE =====
+export const archivedResults = pgTable("archived_results", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  originalId: uuid("original_id").notNull(),
+  schoolId: uuid("school_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  session: varchar("session", { length: 20 }).notNull(),
+  term: varchar("term", { length: 20 }).notNull(),
+  class: varchar("class", { length: 50 }).notNull(),
+  subjects: jsonb("subjects").notNull(),
+  totalScore: decimal("total_score", { precision: 10, scale: 2 }).default("0").notNull(),
+  averageScore: decimal("average_score", { precision: 10, scale: 2 }).default("0").notNull(),
+  position: integer("position"),
+  totalStudents: integer("total_students"),
+  teacherComment: text("teacher_comment"),
+  principalComment: text("principal_comment"),
+  attendance: jsonb("attendance"),
+  status: varchar("status", { length: 20 }).notNull(),
+  publishedAt: timestamp("published_at"),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  rejectionReason: text("rejection_reason"),
+  uploadedBy: uuid("uploaded_by").notNull(),
+  originalCreatedAt: timestamp("original_created_at").notNull(),
+  archivedAt: timestamp("archived_at").defaultNow().notNull(),
+  archivedBy: uuid("archived_by").notNull(),
+}, (table) => ({
+  schoolIdx: index("archived_results_school_idx").on(table.schoolId),
+  archivedAtIdx: index("archived_results_archived_at_idx").on(table.archivedAt),
+}));
+
 // ===== INSERT SCHEMAS =====
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email(),
@@ -582,3 +653,6 @@ export type ResultSheet = typeof resultSheets.$inferSelect;
 export type InsertResultSheet = z.infer<typeof insertResultSheetSchema>;
 export type ResultSheetEntry = typeof resultSheetEntries.$inferSelect;
 export type InsertResultSheetEntry = z.infer<typeof insertResultSheetEntrySchema>;
+export type ArchivedResultSheet = typeof archivedResultSheets.$inferSelect;
+export type ArchivedResultSheetEntry = typeof archivedResultSheetEntries.$inferSelect;
+export type ArchivedResult = typeof archivedResults.$inferSelect;
