@@ -60,6 +60,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+    // Cancel pending queries and clear cache to prevent stale data when switching users
+    queryClient.cancelQueries();
+    queryClient.clear();
     setLocation("/login");
   };
 

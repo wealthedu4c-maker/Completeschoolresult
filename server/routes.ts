@@ -614,7 +614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let sheets = await storage.listResultSheets(req.user!.schoolId, filters);
 
-      // Teachers only see sheets they submitted
+      // Teachers only see sheets they submitted - strict filtering
       if (req.user!.role === "teacher") {
         sheets = sheets.filter(s => s.submittedBy === req.user!.id);
       }
@@ -690,16 +690,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "You are not assigned to teach this subject for this class" });
       }
 
-      // Check if a sheet already exists for this class/subject/session/term
-      const existingSheets = await storage.listResultSheets(req.user!.schoolId!, {
+      // Check if a sheet already exists for THIS TEACHER for this class/subject/session/term
+      const allExistingSheets = await storage.listResultSheets(req.user!.schoolId!, {
         classId,
         subjectId,
         session,
         term,
       });
 
-      // Allow editing existing draft sheets
-      const existingDraft = existingSheets.find(s => s.submittedBy === req.user!.id && s.status === "draft");
+      // Filter to only this teacher's sheets
+      const myExistingSheets = allExistingSheets.filter(s => s.submittedBy === req.user!.id);
+
+      // Allow editing existing draft sheets (only the current teacher's)
+      const existingDraft = myExistingSheets.find(s => s.status === "draft");
       if (existingDraft) {
         // Update existing draft instead of creating new
         await storage.deleteResultSheetEntriesBySheet(existingDraft.id);
@@ -733,11 +736,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ sheet: existingDraft, entries: updatedEntries });
       }
 
-      // Check if there's a non-draft sheet (submitted/approved/published)
-      const activeSheet = existingSheets.find(s => s.status !== "draft" && s.status !== "rejected");
-      if (activeSheet) {
+      // Check if THIS TEACHER already has an active sheet (submitted/approved/published)
+      const myActiveSheet = myExistingSheets.find(s => s.status !== "draft" && s.status !== "rejected");
+      if (myActiveSheet) {
         return res.status(400).json({ 
-          message: `A result sheet for this class/subject already exists with status: ${activeSheet.status}` 
+          message: `You already have a result sheet for this class/subject with status: ${myActiveSheet.status}` 
         });
       }
 
