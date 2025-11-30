@@ -166,6 +166,7 @@ export interface IStorage {
 
   // Aggregation
   aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void>;
+  mergeSheetIntoStudentResults(sheetId: string): Promise<void>;
 
   // Delete & Archive Operations - schoolId required for multi-tenant isolation
   deleteResultSheets(ids: string[], schoolId: string): Promise<void>;
@@ -902,6 +903,111 @@ export class DatabaseStorage implements IStorage {
       await db.update(resultSheets)
         .set({ status: "published", updatedAt: new Date() })
         .where(eq(resultSheets.id, sheet.id));
+    }
+  }
+
+  // New incremental merge method - merges a single approved sheet into student results
+  async mergeSheetIntoStudentResults(sheetId: string): Promise<void> {
+    // Get the sheet
+    const sheet = await this.getResultSheet(sheetId);
+    if (!sheet) {
+      throw new Error("Result sheet not found");
+    }
+
+    // Get all entries for this sheet
+    const entries = await this.listResultSheetEntries(sheetId);
+    if (entries.length === 0) return;
+
+    // Get subject name
+    const subject = await this.getSubject(sheet.subjectId);
+    const subjectName = subject?.name || "Unknown Subject";
+
+    // Get class name
+    const classInfo = await this.getClass(sheet.classId);
+    const className = classInfo?.name || "Unknown Class";
+
+    // Process each student entry
+    for (const entry of entries) {
+      // Build the subject score object
+      const subjectScore = {
+        subject: subjectName,
+        subjectId: sheet.subjectId,
+        ca1: parseFloat(entry.ca1) || 0,
+        ca2: parseFloat(entry.ca2) || 0,
+        exam: parseFloat(entry.exam) || 0,
+        total: parseFloat(entry.total) || 0,
+        grade: entry.grade || "",
+        remark: entry.remark || "",
+        sheetId: sheet.id,
+      };
+
+      // Check if student already has a result for this session/term
+      const existingResult = await this.getResultByStudentSessionTerm(
+        entry.studentId, 
+        sheet.session, 
+        sheet.term
+      );
+
+      if (existingResult) {
+        // Merge the subject into existing subjects array
+        let existingSubjects = Array.isArray(existingResult.subjects) 
+          ? [...existingResult.subjects] 
+          : [];
+
+        // Find if this subject already exists (by subjectId or subject name)
+        const subjectIndex = existingSubjects.findIndex(
+          (s: any) => s.subjectId === sheet.subjectId || s.subject === subjectName
+        );
+
+        if (subjectIndex >= 0) {
+          // Update existing subject entry
+          existingSubjects[subjectIndex] = subjectScore;
+        } else {
+          // Add new subject
+          existingSubjects.push(subjectScore);
+        }
+
+        // Recalculate totals
+        const totalScore = existingSubjects.reduce(
+          (sum: number, s: any) => sum + (parseFloat(s.total) || 0), 
+          0
+        );
+        const averageScore = existingSubjects.length > 0 
+          ? totalScore / existingSubjects.length 
+          : 0;
+
+        // Update the result
+        await db.update(results)
+          .set({
+            subjects: existingSubjects,
+            totalScore: totalScore.toFixed(2),
+            averageScore: averageScore.toFixed(2),
+            class: className,
+            status: "approved",
+            updatedAt: new Date(),
+          })
+          .where(eq(results.id, existingResult.id));
+      } else {
+        // Create new result for this student
+        const student = await this.getStudent(entry.studentId);
+        if (!student) continue;
+
+        const totalScore = subjectScore.total;
+        const averageScore = totalScore; // Only one subject for now
+
+        await db.insert(results).values({
+          schoolId: sheet.schoolId,
+          studentId: entry.studentId,
+          session: sheet.session,
+          term: sheet.term as "First" | "Second" | "Third",
+          class: className,
+          subjects: [subjectScore],
+          totalScore: totalScore.toFixed(2),
+          averageScore: averageScore.toFixed(2),
+          status: "approved",
+          uploadedBy: sheet.submittedBy,
+        });
+      }
     }
   }
 

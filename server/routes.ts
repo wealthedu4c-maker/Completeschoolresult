@@ -936,8 +936,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: { classId: sheet.classId, subjectId: sheet.subjectId, session: sheet.session, term: sheet.term },
       });
 
-      // Aggregate results when sheet is approved
-      await storage.aggregateStudentResults(sheet.schoolId, sheet.session, sheet.term);
+      // Merge this sheet's subjects into student results (incremental merge)
+      await storage.mergeSheetIntoStudentResults(sheet.id);
 
       // Notify the teacher
       await storage.createNotification({
