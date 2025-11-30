@@ -167,11 +167,11 @@ export interface IStorage {
   // Aggregation
   aggregateStudentResults(schoolId: string, session: string, term: string): Promise<void>;
 
-  // Delete & Archive Operations
-  deleteResultSheets(ids: string[]): Promise<void>;
-  archiveResultSheets(ids: string[], archivedBy: string): Promise<void>;
-  deleteResults(ids: string[]): Promise<void>;
-  archiveResults(ids: string[], archivedBy: string): Promise<void>;
+  // Delete & Archive Operations - schoolId required for multi-tenant isolation
+  deleteResultSheets(ids: string[], schoolId: string): Promise<void>;
+  archiveResultSheets(ids: string[], schoolId: string, archivedBy: string): Promise<void>;
+  deleteResults(ids: string[], schoolId: string): Promise<void>;
+  archiveResults(ids: string[], schoolId: string, archivedBy: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {

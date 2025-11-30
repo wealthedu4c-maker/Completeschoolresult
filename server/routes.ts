@@ -555,21 +555,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
       }
       
+      // Get schoolId - for super_admin, we need to verify from the first result
+      let schoolId = req.user!.schoolId;
+      
       // Verify all results belong to user's school
       for (const id of ids) {
         const result = await storage.getResult(id);
         if (!result) {
           return res.status(404).json({ message: `Result ${id} not found` });
         }
-        if (req.user!.role !== "super_admin" && result.schoolId !== req.user!.schoolId) {
+        if (req.user!.role === "super_admin") {
+          // For super admin, use the schoolId from the first result
+          if (!schoolId) schoolId = result.schoolId;
+        } else if (result.schoolId !== req.user!.schoolId) {
           return res.status(403).json({ message: "Cannot modify results from other schools" });
         }
       }
       
+      if (!schoolId) {
+        return res.status(400).json({ message: "School ID required" });
+      }
+      
       if (action === "delete") {
-        await storage.deleteResults(ids);
+        await storage.deleteResults(ids, schoolId);
       } else {
-        await storage.archiveResults(ids, req.user!.id);
+        await storage.archiveResults(ids, schoolId, req.user!.id);
       }
       
       // Create audit log
@@ -1019,21 +1029,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
       }
       
+      // Get schoolId - for super_admin, we need to verify from the first sheet
+      let schoolId = req.user!.schoolId;
+      
       // Verify all sheets belong to user's school
       for (const id of ids) {
         const sheet = await storage.getResultSheet(id);
         if (!sheet) {
           return res.status(404).json({ message: `Result sheet ${id} not found` });
         }
-        if (req.user!.role !== "super_admin" && sheet.schoolId !== req.user!.schoolId) {
+        if (req.user!.role === "super_admin") {
+          // For super admin, use the schoolId from the first sheet
+          if (!schoolId) schoolId = sheet.schoolId;
+        } else if (sheet.schoolId !== req.user!.schoolId) {
           return res.status(403).json({ message: "Cannot modify result sheets from other schools" });
         }
       }
       
+      if (!schoolId) {
+        return res.status(400).json({ message: "School ID required" });
+      }
+      
       if (action === "delete") {
-        await storage.deleteResultSheets(ids);
+        await storage.deleteResultSheets(ids, schoolId);
       } else {
-        await storage.archiveResultSheets(ids, req.user!.id);
+        await storage.archiveResultSheets(ids, schoolId, req.user!.id);
       }
       
       // Create audit log
