@@ -1602,8 +1602,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Check if result is approved
-      if (result.status !== "approved") {
+      // Check if result is approved or published
+      if (result.status !== "approved" && result.status !== "published") {
         return res.status(400).json({ message: "This result has not been approved yet" });
       }
 
