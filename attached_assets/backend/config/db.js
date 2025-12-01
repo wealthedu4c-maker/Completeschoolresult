@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
-const User = require('../models/User');
-const bcrypt = require('bcryptjs');
+const mongoose = require("mongoose");
+const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 
 const connectDB = async () => {
   try {
@@ -21,24 +21,27 @@ const connectDB = async () => {
 
 const createSuperAdmin = async () => {
   try {
-    const superAdminExists = await User.findOne({ role: 'super_admin' });
-    
+    const superAdminExists = await User.findOne({ role: "super_admin" });
+
     if (!superAdminExists) {
-      const hashedPassword = await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD || 'Admin@123456', 10);
-      
+      const hashedPassword = await bcrypt.hash(
+        process.env.SUPER_ADMIN_PASSWORD || "Admin@123456",
+        10,
+      );
+
       await User.create({
-        email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@smartresult.com',
+        email: process.env.SUPER_ADMIN_EMAIL || "superadmin@smartresult.com",
         password: hashedPassword,
-        firstName: 'Super',
-        lastName: 'Admin',
-        role: 'super_admin',
-        isActive: true
+        firstName: "Super",
+        lastName: "Admin",
+        role: "super_admin",
+        isActive: true,
       });
-      
-      console.log('Super Admin created successfully');
+
+      console.log("Super Admin created successfully");
     }
   } catch (error) {
-    console.error('Error creating super admin:', error.message);
+    console.error("Error creating super admin:", error.message);
   }
 };
 
