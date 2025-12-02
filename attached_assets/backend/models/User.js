@@ -1,62 +1,72 @@
-const mongoose = require('mongoose');
+// models/User.js
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
 
-const userSchema = new mongoose.Schema({
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   email: {
-    type: String,
-    required: [true, 'Email is required'],
+    type: DataTypes.STRING,
+    allowNull: false,
     unique: true,
-    lowercase: true,
-    trim: true
+    validate: {
+      isEmail: true
+    }
   },
   password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: 6,
-    select: false
+    type: DataTypes.STRING,
+    allowNull: false
   },
   firstName: {
-    type: String,
-    required: [true, 'First name is required'],
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   lastName: {
-    type: String,
-    required: [true, 'Last name is required'],
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  phoneNumber: {  // ✅ NEW FIELD
-    type: String,
-    trim: true
+  phoneNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
   },
   role: {
-    type: String,
-    enum: ['super_admin', 'school_admin', 'teacher'],
-    required: true
+    type: DataTypes.ENUM('super_admin', 'school_admin', 'teacher'),
+    allowNull: false
   },
-  school: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: function() {
-      return this.role !== 'super_admin';
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Schools',
+      key: 'id'
     }
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   },
   lastLogin: {
-    type: Date
+    type: DataTypes.DATE,
+    allowNull: true
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  createdById: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
   }
 }, {
-  timestamps: true
+  tableName: 'users',
+  timestamps: true,
+  indexes: [
+    { fields: ['email'] },
+    { fields: ['schoolId', 'role'] }
+  ]
 });
 
-// Index for performance
-userSchema.index({ email: 1 });
-userSchema.index({ school: 1, role: 1 });
-
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;
