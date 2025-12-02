@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
-app.set("env", "development");
+// app.set("env", process.env.NODE_ENV || "development");
 
 declare module 'http' {
   interface IncomingMessage {
