@@ -1,57 +1,58 @@
-const mongoose = require('mongoose');
-
-const pinRequestSchema = new mongoose.Schema({
-  school: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
+// ==== models/PINRequest.js ====
+const PINRequest = sequelize.define('PINRequest', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  requestedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Schools', key: 'id' }
+  },
+  requestedById: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
   },
   session: {
-    type: String,
-    required: true // e.g., "2023/2024"
+    type: DataTypes.STRING,
+    allowNull: false
   },
   term: {
-    type: String,
-    enum: ['First', 'Second', 'Third'],
-    required: true
+    type: DataTypes.ENUM('First', 'Second', 'Third'),
+    allowNull: false
   },
   quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-    max: 1000
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: { min: 1, max: 1000 }
   },
-  // ✅ REMOVED: reason field
   status: {
-    type: String,
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending'
   },
-  processedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+  processedById: {
+    type: DataTypes.UUID,
+    references: { model: 'Users', key: 'id' }
   },
   processedAt: {
-    type: Date
+    type: DataTypes.DATE
   },
   rejectionReason: {
-    type: String
+    type: DataTypes.TEXT
   },
-  generatedPINs: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'PIN'
-  }]
-}, { 
-  timestamps: true 
+  generatedPINs: {
+    type: DataTypes.JSONB,
+    defaultValue: []
+  }
+}, {
+  tableName: 'pin_requests',
+  timestamps: true,
+  indexes: [
+    { fields: ['schoolId', 'status'] },
+    { fields: ['status', 'createdAt'] }
+  ]
 });
 
-// Indexes for performance
-pinRequestSchema.index({ school: 1, status: 1 });
-pinRequestSchema.index({ status: 1, createdAt: -1 });
-
-module.exports = mongoose.model('PINRequest', pinRequestSchema);
+module.exports = PINRequest;
