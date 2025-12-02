@@ -1,45 +1,50 @@
-const mongoose = require('mongoose');
-
-const classSchema = new mongoose.Schema({
-  school: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
+// ==== models/Class.js ====
+const Class = sequelize.define('Class', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Schools', key: 'id' }
   },
   name: {
-    type: String,
-    required: true // e.g., "Primary 1", "JSS 1", "SS 2"
+    type: DataTypes.STRING,
+    allowNull: false
   },
   level: {
-    type: String,
-    enum: ['Primary', 'JSS', 'SS'], // ✅ UPDATED: Added 'Primary'
-    required: true
+    type: DataTypes.ENUM('Primary', 'JSS', 'SS'),
+    allowNull: false
   },
   grade: {
-    type: Number,
-    required: true, // 1, 2, 3, 4, 5, 6 (for Primary); 1, 2, 3 (for JSS/SS)
-    min: 1,
-    max: 6 // ✅ UPDATED: Changed from 3 to 6 to accommodate Primary
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: { min: 1, max: 6 }
   },
   arm: {
-    type: String // A, B, C (optional)
+    type: DataTypes.STRING
   },
   academicYear: {
-    type: String,
-    required: true // e.g., "2023/2024"
+    type: DataTypes.STRING,
+    allowNull: false
   },
   capacity: {
-    type: Number,
-    default: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  createdById: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
   }
-}, { timestamps: true });
+}, {
+  tableName: 'classes',
+  timestamps: true,
+  indexes: [
+    { unique: true, fields: ['schoolId', 'name', 'academicYear'] }
+  ]
+});
 
-// Compound index for uniqueness
-classSchema.index({ school: 1, name: 1, academicYear: 1 }, { unique: true });
-
-module.exports = mongoose.model('Class', classSchema);
+module.exports = Class;
