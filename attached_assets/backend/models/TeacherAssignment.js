@@ -1,39 +1,46 @@
-const mongoose = require('mongoose');
-
-const teacherAssignmentSchema = new mongoose.Schema({
-  school: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
+// ==== models/TeacherAssignment.js ====
+const TeacherAssignment = sequelize.define('TeacherAssignment', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  teacher: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Schools', key: 'id' }
   },
-  subject: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Subject',
-    required: true
+  teacherId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
   },
-  class: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Class',
-    required: true
+  subjectId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Subjects', key: 'id' }
+  },
+  classId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Classes', key: 'id' }
   },
   academicYear: {
-    type: String,
-    required: true // e.g., "2023/2024"
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  assignedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  assignedById: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
   }
-}, { timestamps: true });
+}, {
+  tableName: 'teacher_assignments',
+  timestamps: true,
+  indexes: [
+    { unique: true, fields: ['teacherId', 'subjectId', 'classId', 'academicYear'] },
+    { fields: ['schoolId', 'academicYear'] }
+  ]
+});
 
-// Compound index for uniqueness
-teacherAssignmentSchema.index({ teacher: 1, subject: 1, class: 1, academicYear: 1 }, { unique: true });
-teacherAssignmentSchema.index({ school: 1, academicYear: 1 });
-
-module.exports = mongoose.model('TeacherAssignment', teacherAssignmentSchema);
+module.exports = TeacherAssignment;
