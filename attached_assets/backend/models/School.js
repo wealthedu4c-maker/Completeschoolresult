@@ -1,66 +1,77 @@
-const mongoose = require('mongoose');
+// models/School.js
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
 
-const schoolSchema = new mongoose.Schema({
+const School = sequelize.define('School', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   name: {
-    type: String,
-    required: [true, 'School name is required'],
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   code: {
-    type: String,
-    required: [true, 'School code is required'],
-    unique: true,
-    uppercase: true,
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
   },
   address: {
-    type: String,
-    required: [true, 'Address is required']
+    type: DataTypes.STRING,
+    allowNull: false
   },
   city: {
-    type: String,
-    required: [true, 'City is required']
+    type: DataTypes.STRING,
+    allowNull: false
   },
   state: {
-    type: String,
-    required: [true, 'State is required']
+    type: DataTypes.STRING,
+    allowNull: false
   },
   country: {
-    type: String,
-    required: [true, 'Country is required'],
-    default: 'Nigeria'
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'Nigeria'
   },
   phone: {
-    type: String,
-    required: [true, 'Phone is required']
+    type: DataTypes.STRING,
+    allowNull: false
   },
   email: {
-    type: String,
-    required: [true, 'Email is required'],
-    lowercase: true,
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      isEmail: true
+    }
   },
   logo: {
-    type: String // URL to logo
+    type: DataTypes.STRING,
+    allowNull: true
   },
   motto: {
-    type: String
+    type: DataTypes.STRING,
+    allowNull: true
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  createdById: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'Users',
+      key: 'id'
+    }
   }
 }, {
-  timestamps: true
+  tableName: 'schools',
+  timestamps: true,
+  indexes: [
+    { fields: ['code'] },
+    { fields: ['isActive'] }
+  ]
 });
 
-// Indexes
-schoolSchema.index({ code: 1 });
-schoolSchema.index({ isActive: 1 });
-
-module.exports = mongoose.model('School', schoolSchema);
+module.exports = School;
