@@ -1,36 +1,78 @@
-const mongoose = require('mongoose');
+// ==== models/Student.js ====
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/db');
 
-const subjectSchema = new mongoose.Schema({
-  school: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'School',
-    required: true
+const Student = sequelize.define('Student', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
-  name: {
-    type: String,
-    required: true // e.g., "Mathematics", "English Language"
+  schoolId: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Schools', key: 'id' }
   },
-  code: {
-    type: String,
-    required: true,
-    uppercase: true // e.g., "MATH101", "ENG101"
+  admissionNumber: {
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  category: {
-    type: String,
-    enum: ['Core', 'Elective', 'Vocational'],
-    default: 'Core'
+  firstName: {
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  description: {
-    type: String
+  lastName: {
+    type: DataTypes.STRING,
+    allowNull: false
   },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+  otherNames: {
+    type: DataTypes.STRING
+  },
+  gender: {
+    type: DataTypes.ENUM('Male', 'Female'),
+    allowNull: false
+  },
+  dateOfBirth: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  class: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  classArm: {
+    type: DataTypes.STRING
+  },
+  parentName: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  parentPhone: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  parentEmail: {
+    type: DataTypes.STRING
+  },
+  address: {
+    type: DataTypes.TEXT
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  createdById: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
   }
-}, { timestamps: true });
+}, {
+  tableName: 'students',
+  timestamps: true,
+  indexes: [
+    { unique: true, fields: ['schoolId', 'admissionNumber'] },
+    { fields: ['schoolId', 'class'] }
+  ]
+});
 
-// Compound index for uniqueness
-subjectSchema.index({ school: 1, code: 1 }, { unique: true });
-
-module.exports = mongoose.model('Subject', subjectSchema);
+module.exports = Student;
