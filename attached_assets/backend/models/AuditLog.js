@@ -1,52 +1,55 @@
-const mongoose = require('mongoose');
-
-const auditLogSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+// ==== models/AuditLog.js ====
+const AuditLog = sequelize.define('AuditLog', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  userId: {
+    type: DataTypes.UUID,
+    references: { model: 'Users', key: 'id' }
   },
   action: {
-    type: String,
-    required: true // e.g., 'CREATE_SCHOOL', 'UPDATE_RESULT', 'DELETE_STUDENT'
+    type: DataTypes.STRING,
+    allowNull: false
   },
   resource: {
-    type: String,
-    required: true // e.g., 'School', 'Result', 'Student'
+    type: DataTypes.STRING,
+    allowNull: false
   },
   resourceId: {
-    type: mongoose.Schema.Types.ObjectId
+    type: DataTypes.UUID
   },
   method: {
-    type: String,
-    enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+    type: DataTypes.ENUM('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
   },
   endpoint: {
-    type: String
+    type: DataTypes.STRING
   },
   ipAddress: {
-    type: String
+    type: DataTypes.STRING
   },
   userAgent: {
-    type: String
+    type: DataTypes.TEXT
   },
   changes: {
-    type: mongoose.Schema.Types.Mixed // Store old and new values
+    type: DataTypes.JSONB
   },
   status: {
-    type: String,
-    enum: ['success', 'failure'],
-    default: 'success'
+    type: DataTypes.ENUM('success', 'failure'),
+    defaultValue: 'success'
   },
   errorMessage: {
-    type: String
+    type: DataTypes.TEXT
   }
 }, {
-  timestamps: true
+  tableName: 'audit_logs',
+  timestamps: true,
+  indexes: [
+    { fields: ['userId', 'createdAt'] },
+    { fields: ['action', 'createdAt'] },
+    { fields: ['resource', 'resourceId'] }
+  ]
 });
 
-// Indexes
-auditLogSchema.index({ user: 1, createdAt: -1 });
-auditLogSchema.index({ action: 1, createdAt: -1 });
-auditLogSchema.index({ resource: 1, resourceId: 1 });
-
-module.exports = mongoose.model('AuditLog', auditLogSchema);
+module.exports = AuditLog;
