@@ -5,7 +5,7 @@ import { authenticate, authorize, JWT_SECRET, type AuthRequest } from "./middlew
 import { calculateResults, generatePIN, getGradeAndRemark } from "./utils/result-calculator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { insertUserSchema, insertSchoolSchema, insertStudentSchema, insertResultSchema, insertPinSchema, insertPinRequestSchema, insertResultSheetSchema, insertResultSheetEntrySchema, GradeRange, DEFAULT_GRADE_RANGES, gradeRangeSchema } from "@shared/schema";
+import { insertUserSchema, insertStudentSchema, insertResultSchema, insertPinRequestSchema, GradeRange, DEFAULT_GRADE_RANGES, gradeRangeSchema } from "@shared/schema";
 import { z } from "zod";
 
 // Helper function to get school's grade configuration
@@ -121,27 +121,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/schools", authenticate, authorize("super_admin"), async (req: AuthRequest, res) => {
     try {
       const { name, code, email, subdomain, logo, initialPassword } = req.body;
-      
+
       if (!name || !email || !subdomain) {
         return res.status(400).json({ message: "Name, email and subdomain are required" });
       }
-      
+
       // Check if subdomain already exists
       const existingSchool = await storage.getSchoolBySubdomain(subdomain);
       if (existingSchool) {
         return res.status(400).json({ message: "Subdomain is already in use" });
       }
-      
+
       // Check if email is already used
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: "Email is already registered" });
       }
-      
+
       // Generate school code if not provided
-      const schoolCode = code || name.replace(/[^a-zA-Z]/g, "").substring(0, 3).toUpperCase() + 
+      const schoolCode = code || name.replace(/[^a-zA-Z]/g, "").substring(0, 3).toUpperCase() +
         Math.floor(1000 + Math.random() * 9000);
-      
+
       // Create the school first
       const school = await storage.createSchool({
         name,
@@ -152,7 +152,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true, // Super admin created schools are automatically active
         createdBy: req.user!.id,
       });
-      
+
       // Create school admin user if initialPassword is provided
       if (initialPassword) {
         const hashedPassword = await bcrypt.hash(initialPassword, 10);
@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           createdBy: req.user!.id,
         });
       }
-      
+
       res.status(201).json(school);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -194,7 +194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only allow specific fields to be updated by school admin
       const { logo, motto, address, phone, gradeRanges, computationMode } = req.body;
       const updateData: any = {};
-      
+
       if (logo !== undefined) updateData.logo = logo;
       if (motto !== undefined) updateData.motto = motto;
       if (address !== undefined) updateData.address = address;
@@ -202,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (gradeRanges !== undefined) {
         // Validate grade ranges
         if (Array.isArray(gradeRanges)) {
-          const validRanges = gradeRanges.every((r: any) => 
+          const validRanges = gradeRanges.every((r: any) =>
             r.grade && typeof r.minScore === 'number' && typeof r.maxScore === 'number' && r.remark
           );
           if (validRanges) {
@@ -255,8 +255,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate computation mode
       if (computationMode !== undefined) {
         if (!['total_average_only', 'position_average_only', 'total_average_position'].includes(computationMode)) {
-          return res.status(400).json({ 
-            message: "computationMode must be one of: total_average_only, position_average_only, total_average_position" 
+          return res.status(400).json({
+            message: "computationMode must be one of: total_average_only, position_average_only, total_average_position"
           });
         }
         updateData.computationMode = computationMode;
@@ -344,14 +344,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "School association required" });
       }
 
-      const schoolId = req.user!.role === "super_admin" 
+      const schoolId = req.user!.role === "super_admin"
         ? req.query.schoolId as string
         : req.user!.schoolId!;
 
       if (!schoolId) {
         return res.status(400).json({ message: "School ID required" });
       }
-      
+
       const students = await storage.listStudents(schoolId);
       res.json(students);
     } catch (error: any) {
@@ -362,7 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/students", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
     try {
       const validated = insertStudentSchema.parse(req.body);
-      
+
       // Ensure student belongs to user's school
       if (validated.schoolId !== req.user!.schoolId) {
         return res.status(403).json({ message: "Cannot create students for other schools" });
@@ -420,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "School association required" });
       }
 
-      const schoolId = req.user!.role === "super_admin" 
+      const schoolId = req.user!.role === "super_admin"
         ? req.query.schoolId as string
         : req.user!.schoolId!;
 
@@ -455,10 +455,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!student || student.schoolId !== req.user!.schoolId) {
         return res.status(403).json({ message: "Student not found or belongs to another school" });
       }
-      
+
       // Get school's grade configuration
       const gradeRanges = await getSchoolGradeRanges(req.user!.schoolId!);
-      
+
       // Auto-calculate grades and totals using school's grade config
       const calculated = calculateResults(validated.subjects, gradeRanges);
 
@@ -526,8 +526,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if school has a logo before approving results
       const school = await storage.getSchool(req.user!.schoolId!);
       if (!school?.logo) {
-        return res.status(400).json({ 
-          message: "Please upload your school logo in Profile Settings before approving results" 
+        return res.status(400).json({
+          message: "Please upload your school logo in Profile Settings before approving results"
         });
       }
 
@@ -618,7 +618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Teacher adds teacherComment, school_admin adds principalComment
-      const updateData = req.user!.role === "teacher" 
+      const updateData = req.user!.role === "teacher"
         ? { teacherComment: comment }
         : { principalComment: comment };
 
@@ -634,18 +634,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/results/bulk-action", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
     try {
       const { ids, action } = req.body;
-      
+
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ message: "No results selected" });
       }
-      
+
       if (!["delete", "archive"].includes(action)) {
         return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
       }
-      
+
       // Get schoolId - for super_admin, we need to verify from the first result
       let schoolId = req.user!.schoolId;
-      
+
       // Verify all results belong to user's school
       for (const id of ids) {
         const result = await storage.getResult(id);
@@ -659,17 +659,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Cannot modify results from other schools" });
         }
       }
-      
+
       if (!schoolId) {
         return res.status(400).json({ message: "School ID required" });
       }
-      
+
       if (action === "delete") {
         await storage.deleteResults(ids, schoolId);
       } else {
         await storage.archiveResults(ids, schoolId, req.user!.id);
       }
-      
+
       // Create audit log
       await storage.createAuditLog({
         userId: req.user!.id,
@@ -677,7 +677,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resource: "result",
         details: { ids, count: ids.length },
       });
-      
+
       res.json({ message: `Successfully ${action}d ${ids.length} result(s)` });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -735,8 +735,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const enrichedEntries = entries.map(entry => {
         const student = studentMap.get(entry.studentId);
-        const studentName = student 
-          ? `${student.firstName} ${student.lastName}` 
+        const studentName = student
+          ? `${student.firstName} ${student.lastName}`
           : "Unknown Student";
         return {
           ...entry,
@@ -794,7 +794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingDraft) {
         // Update existing draft instead of creating new
         await storage.deleteResultSheetEntriesBySheet(existingDraft.id);
-        
+
         // Create new entries
         if (entries && entries.length > 0) {
           const entriesToCreate = entries.map((e: any) => {
@@ -803,7 +803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const exam = parseFloat(e.exam) || 0;
             const total = ca1 + ca2 + exam;
             const grade = calculateGrade(total);
-            const remark = getGradeRemark(grade);
+            const remark = getGradeRemarkFromTotal(total);
 
             return {
               sheetId: existingDraft.id,
@@ -827,8 +827,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if THIS TEACHER already has an active sheet (submitted/approved/published)
       const myActiveSheet = myExistingSheets.find(s => s.status !== "draft" && s.status !== "rejected");
       if (myActiveSheet) {
-        return res.status(400).json({ 
-          message: `You already have a result sheet for this class/subject with status: ${myActiveSheet.status}` 
+        return res.status(400).json({
+          message: `You already have a result sheet for this class/subject with status: ${myActiveSheet.status}`
         });
       }
 
@@ -851,7 +851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const exam = parseFloat(e.exam) || 0;
           const total = ca1 + ca2 + exam;
           const grade = calculateGrade(total);
-          const remark = getGradeRemark(grade);
+          const remark = getGradeRemarkFromTotal(total);
 
           return {
             sheetId: sheet.id,
@@ -908,7 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const exam = parseFloat(e.exam) || 0;
           const total = ca1 + ca2 + exam;
           const grade = calculateGrade(total);
-          const remark = getGradeRemark(grade);
+          const remark = getGradeRemarkFromTotal(total);
 
           return {
             sheetId: sheet.id,
@@ -969,7 +969,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const school = await storage.getSchool(req.user!.schoolId!);
       const allUsers = await storage.listUsers(req.user!.schoolId!);
       const schoolAdmins = allUsers.filter(u => u.role === "school_admin");
-      
+
       const classRecord = await storage.getClass(sheet.classId);
       const subject = await storage.getSubject(sheet.subjectId);
 
@@ -1008,8 +1008,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if school has a logo
       const school = await storage.getSchool(req.user!.schoolId!);
       if (!school?.logo) {
-        return res.status(400).json({ 
-          message: "Please upload your school logo in Profile Settings before approving results" 
+        return res.status(400).json({
+          message: "Please upload your school logo in Profile Settings before approving results"
         });
       }
 
@@ -1069,7 +1069,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: { session, term, sheetsProcessed },
       });
 
-      res.json({ 
+      res.json({
         message: `Successfully re-aggregated ${sheetsProcessed} result sheets`,
         sheetsProcessed
       });
@@ -1163,18 +1163,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/result-sheets/bulk-action", authenticate, authorize("school_admin", "super_admin"), async (req: AuthRequest, res) => {
     try {
       const { ids, action } = req.body;
-      
+
       if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ message: "No result sheets selected" });
       }
-      
+
       if (!["delete", "archive"].includes(action)) {
         return res.status(400).json({ message: "Invalid action. Use 'delete' or 'archive'" });
       }
-      
+
       // Get schoolId - for super_admin, we need to verify from the first sheet
       let schoolId = req.user!.schoolId;
-      
+
       // Verify all sheets belong to user's school
       for (const id of ids) {
         const sheet = await storage.getResultSheet(id);
@@ -1188,17 +1188,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(403).json({ message: "Cannot modify result sheets from other schools" });
         }
       }
-      
+
       if (!schoolId) {
         return res.status(400).json({ message: "School ID required" });
       }
-      
+
       if (action === "delete") {
         await storage.deleteResultSheets(ids, schoolId);
       } else {
         await storage.archiveResultSheets(ids, schoolId, req.user!.id);
       }
-      
+
       // Create audit log
       await storage.createAuditLog({
         userId: req.user!.id,
@@ -1206,7 +1206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resource: "result_sheet",
         details: { ids, count: ids.length },
       });
-      
+
       res.json({ message: `Successfully ${action}d ${ids.length} result sheet(s)` });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1313,7 +1313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const school = await storage.getSchool(req.user!.schoolId!);
       const allUsers = await storage.listUsers();
       const superAdmins = allUsers.filter(u => u.role === "super_admin");
-      
+
       for (const admin of superAdmins) {
         await storage.createNotification({
           userId: admin.id,
@@ -1353,7 +1353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { session, term, classId } = req.body;
-      
+
       if (!session || !term) {
         return res.status(400).json({ message: "Session and term are required" });
       }
@@ -1361,19 +1361,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check school's computation mode
       const school = await storage.getSchool(schoolId);
       const computationMode = school?.computationMode || 'total_average_only';
-      
+
       // Only calculate positions if computation mode includes positions
       if (computationMode === 'total_average_only') {
-        return res.status(400).json({ 
-          message: "Position calculation is disabled. Update computation mode to include positions." 
+        return res.status(400).json({
+          message: "Position calculation is disabled. Update computation mode to include positions."
         });
       }
 
       const updatedCount = await storage.calculateAndUpdatePositions(schoolId, session, term, classId);
-      
-      res.json({ 
+
+      res.json({
         message: `Positions calculated for ${updatedCount} results`,
-        updatedCount 
+        updatedCount
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1500,11 +1500,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!classRecord) {
         return res.status(404).json({ message: "Class not found" });
       }
-      
+
       if (req.user!.role === "school_admin" && classRecord.schoolId !== req.user!.schoolId) {
         return res.status(403).json({ message: "Cannot delete classes from other schools" });
       }
-      
+
       // Use schoolId-scoped delete for extra security
       const schoolIdToCheck = req.user!.role === "school_admin" ? req.user!.schoolId : undefined;
       await storage.deleteClass(req.params.id, schoolIdToCheck);
@@ -1563,11 +1563,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!subject) {
         return res.status(404).json({ message: "Subject not found" });
       }
-      
+
       if (req.user!.role === "school_admin" && subject.schoolId !== req.user!.schoolId) {
         return res.status(403).json({ message: "Cannot delete subjects from other schools" });
       }
-      
+
       // Use schoolId-scoped delete for extra security
       const schoolIdToCheck = req.user!.role === "school_admin" ? req.user!.schoolId : undefined;
       await storage.deleteSubject(req.params.id, schoolIdToCheck);
@@ -1660,7 +1660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== PUBLIC ROUTES =====
-  
+
   // Public result checking with PIN
   app.post("/api/public/check-result", async (req, res) => {
     try {
@@ -1682,8 +1682,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate session and term match the PIN
       if (pinRecord.session !== session || pinRecord.term !== term) {
-        return res.status(400).json({ 
-          message: `This PIN is only valid for ${pinRecord.session} ${pinRecord.term} Term` 
+        return res.status(400).json({
+          message: `This PIN is only valid for ${pinRecord.session} ${pinRecord.term} Term`
         });
       }
 
@@ -1700,14 +1700,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Find the student
       const student = await storage.getStudentByAdmissionNumber(
-        admissionNumber.toUpperCase(), 
+        admissionNumber.toUpperCase(),
         pinRecord.schoolId
       );
 
       if (!student) {
         // Log failed attempt
         const currentAttempts = Array.isArray(pinRecord.attempts) ? pinRecord.attempts : [];
-        await storage.updatePin(pinRecord.id, { 
+        await storage.updatePin(pinRecord.id, {
           attempts: [...currentAttempts, { type: "failed", admissionNumber, timestamp: new Date().toISOString() }]
         });
         return res.status(404).json({ message: "Student not found with this registration number" });
@@ -1721,8 +1721,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       if (!result) {
-        return res.status(404).json({ 
-          message: `No result found for ${pinRecord.session} ${pinRecord.term} Term` 
+        return res.status(404).json({
+          message: `No result found for ${pinRecord.session} ${pinRecord.term} Term`
         });
       }
 
@@ -1736,7 +1736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update PIN usage
       const currentAttempts = Array.isArray(pinRecord.attempts) ? pinRecord.attempts : [];
-      await storage.updatePin(pinRecord.id, { 
+      await storage.updatePin(pinRecord.id, {
         isUsed: true,
         attempts: [...currentAttempts, { type: "success", admissionNumber: student.admissionNumber, studentId: student.id, timestamp: new Date().toISOString() }],
         usedBy: { admissionNumber: student.admissionNumber, studentName: `${student.firstName} ${student.lastName}`, usedAt: new Date().toISOString() },
@@ -1840,7 +1840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== BULK UPLOAD ROUTES =====
-  
+
   // Bulk upload students
   app.post("/api/students/bulk", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
     try {
@@ -1983,7 +1983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ca2: Number(subj.ca2) || 0,
             exam: Number(subj.exam) || 0,
           })) || [];
-          
+
           const calculated = calculateResults(subjectsInput, gradeRanges);
           const subjects = calculated.subjects;
 
@@ -2046,7 +2046,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { name, maxScore, order } = req.body;
-      
+
       const metric = await storage.createScoreMetric({
         schoolId,
         name,
@@ -2244,7 +2244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== RESULT WORKFLOW ROUTES =====
-  
+
   // Submit result (moves from draft to submitted)
   app.post("/api/results/:id/submit", authenticate, authorize("school_admin", "teacher"), async (req: AuthRequest, res) => {
     try {
@@ -2417,7 +2417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { teacherComment, principalComment } = req.body;
-      
+
       const updates: any = {};
       if (teacherComment !== undefined) {
         updates.teacherComment = teacherComment;
@@ -2458,7 +2458,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const metrics = await storage.listScoreMetrics(schoolId);
 
       // If no custom metrics, use defaults
-      const metricColumns = metrics.length > 0 
+      const metricColumns = metrics.length > 0
         ? metrics.map(m => m.name)
         : ["CA1", "CA2", "Exam"];
 
@@ -2471,7 +2471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const header = ["AdmissionNumber", "StudentName", ...subjectColumns].join(",");
-      
+
       // Get students in this class for sample rows
       const students = await storage.listStudents(schoolId);
       const classStudents = students.filter(s => s.class === classData.name);

@@ -581,7 +581,6 @@ export const insertResultSchema = createInsertSchema(results, {
     grade: z.string().optional(),
     remark: z.string().optional(),
   })),
-  uploadedBy: z.string().optional(),
   totalScore: z.string().optional(),
   averageScore: z.string().optional(),
   status: z.string().optional(),
@@ -593,9 +592,9 @@ export const insertPinRequestSchema = createInsertSchema(pinRequests, {
   quantity: z.number().min(1).max(1000),
   session: z.string().min(1),
   term: z.enum(["First", "Second", "Third"]),
-}).omit({ 
-  id: true, 
-  createdAt: true, 
+}).omit({
+  id: true,
+  createdAt: true,
   updatedAt: true,
   schoolId: true,
   requestedBy: true,
