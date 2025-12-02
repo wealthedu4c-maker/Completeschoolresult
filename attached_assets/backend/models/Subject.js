@@ -1,8 +1,5 @@
-// ==== models/Student.js ====
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
-
-const Student = sequelize.define('Student', {
+// ==== models/Subject.js ====
+const Subject = sequelize.define('Subject', {
   id: {
     type: DataTypes.UUID,
     defaultValue: DataTypes.UUIDV4,
@@ -13,53 +10,20 @@ const Student = sequelize.define('Student', {
     allowNull: false,
     references: { model: 'Schools', key: 'id' }
   },
-  admissionNumber: {
+  name: {
     type: DataTypes.STRING,
     allowNull: false
   },
-  firstName: {
+  code: {
     type: DataTypes.STRING,
     allowNull: false
   },
-  lastName: {
-    type: DataTypes.STRING,
-    allowNull: false
+  category: {
+    type: DataTypes.ENUM('Core', 'Elective', 'Vocational'),
+    defaultValue: 'Core'
   },
-  otherNames: {
-    type: DataTypes.STRING
-  },
-  gender: {
-    type: DataTypes.ENUM('Male', 'Female'),
-    allowNull: false
-  },
-  dateOfBirth: {
-    type: DataTypes.DATE,
-    allowNull: false
-  },
-  class: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  classArm: {
-    type: DataTypes.STRING
-  },
-  parentName: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  parentPhone: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  parentEmail: {
-    type: DataTypes.STRING
-  },
-  address: {
+  description: {
     type: DataTypes.TEXT
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
   },
   createdById: {
     type: DataTypes.UUID,
@@ -67,12 +31,11 @@ const Student = sequelize.define('Student', {
     references: { model: 'Users', key: 'id' }
   }
 }, {
-  tableName: 'students',
+  tableName: 'subjects',
   timestamps: true,
   indexes: [
-    { unique: true, fields: ['schoolId', 'admissionNumber'] },
-    { fields: ['schoolId', 'class'] }
+    { unique: true, fields: ['schoolId', 'code'] }
   ]
 });
 
-module.exports = Student;
+module.exports = Subject;
