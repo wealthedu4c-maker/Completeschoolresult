@@ -1,7 +1,7 @@
-// middlewares/auth.js
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const User = require('../models/User');
 
+// Protect routes
 exports.protect = async (req, res, next) => {
   let token;
 
@@ -18,7 +18,7 @@ exports.protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findByPk(decoded.id);
+    req.user = await User.findById(decoded.id).select('-password');
     
     if (!req.user || !req.user.isActive) {
       return res.status(401).json({
@@ -36,6 +36,7 @@ exports.protect = async (req, res, next) => {
   }
 };
 
+// Grant access to specific roles
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -48,6 +49,7 @@ exports.authorize = (...roles) => {
   };
 };
 
+// Check if user belongs to the school (for school_admin and teacher)
 exports.checkSchoolAccess = async (req, res, next) => {
   if (req.user.role === 'super_admin') {
     return next();
@@ -55,7 +57,7 @@ exports.checkSchoolAccess = async (req, res, next) => {
 
   const schoolId = req.params.schoolId || req.body.school || req.query.school;
 
-  if (schoolId && req.user.schoolId !== schoolId) {
+  if (schoolId && req.user.school.toString() !== schoolId) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to access this school\'s resources'
