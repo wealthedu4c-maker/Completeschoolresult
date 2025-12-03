@@ -1,46 +1,39 @@
-// ==== models/TeacherAssignment.js ====
-const TeacherAssignment = sequelize.define('TeacherAssignment', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
+const mongoose = require('mongoose');
+
+const teacherAssignmentSchema = new mongoose.Schema({
+  school: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: true
   },
-  schoolId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Schools', key: 'id' }
+  teacher: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-  teacherId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  subject: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subject',
+    required: true
   },
-  subjectId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Subjects', key: 'id' }
-  },
-  classId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Classes', key: 'id' }
+  class: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    required: true
   },
   academicYear: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true // e.g., "2023/2024"
   },
-  assignedById: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  assignedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
-}, {
-  tableName: 'teacher_assignments',
-  timestamps: true,
-  indexes: [
-    { unique: true, fields: ['teacherId', 'subjectId', 'classId', 'academicYear'] },
-    { fields: ['schoolId', 'academicYear'] }
-  ]
-});
+}, { timestamps: true });
 
-module.exports = TeacherAssignment;
+// Compound index for uniqueness
+teacherAssignmentSchema.index({ teacher: 1, subject: 1, class: 1, academicYear: 1 }, { unique: true });
+teacherAssignmentSchema.index({ school: 1, academicYear: 1 });
+
+module.exports = mongoose.model('TeacherAssignment', teacherAssignmentSchema);

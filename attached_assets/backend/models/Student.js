@@ -1,78 +1,77 @@
-// ==== models/Student.js ====
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const mongoose = require('mongoose');
 
-const Student = sequelize.define('Student', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  schoolId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Schools', key: 'id' }
+const studentSchema = new mongoose.Schema({
+  school: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: true
   },
   admissionNumber: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: [true, 'Admission number is required'],
+    uppercase: true,
+    trim: true
   },
   firstName: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: [true, 'First name is required'],
+    trim: true
   },
   lastName: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: [true, 'Last name is required'],
+    trim: true
   },
   otherNames: {
-    type: DataTypes.STRING
+    type: String,
+    trim: true
   },
   gender: {
-    type: DataTypes.ENUM('Male', 'Female'),
-    allowNull: false
+    type: String,
+    enum: ['Male', 'Female'],
+    required: true
   },
   dateOfBirth: {
-    type: DataTypes.DATE,
-    allowNull: false
+    type: Date,
+    required: true
   },
   class: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: [true, 'Class is required']
   },
   classArm: {
-    type: DataTypes.STRING
+    type: String // e.g., 'A', 'B', 'C'
   },
   parentName: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   parentPhone: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   parentEmail: {
-    type: DataTypes.STRING
+    type: String,
+    lowercase: true
   },
   address: {
-    type: DataTypes.TEXT
+    type: String
   },
   isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+    type: Boolean,
+    default: true
   },
-  createdById: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
 }, {
-  tableName: 'students',
-  timestamps: true,
-  indexes: [
-    { unique: true, fields: ['schoolId', 'admissionNumber'] },
-    { fields: ['schoolId', 'class'] }
-  ]
+  timestamps: true
 });
 
-module.exports = Student;
+// Compound index for uniqueness
+studentSchema.index({ school: 1, admissionNumber: 1 }, { unique: true });
+studentSchema.index({ school: 1, class: 1 });
+
+module.exports = mongoose.model('Student', studentSchema);

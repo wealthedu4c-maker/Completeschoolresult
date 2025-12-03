@@ -1,115 +1,152 @@
-// ==== models/Result.js ====
-const Result = sequelize.define('Result', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
+const mongoose = require('mongoose');
+
+const subjectScoreSchema = new mongoose.Schema({
+  subject: {
+    type: String,
+    required: true
   },
-  schoolId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Schools', key: 'id' }
+  ca1: {
+    type: Number,
+    min: 0,
+    max: 10,
+    default: 0
   },
-  studentId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Students', key: 'id' }
+  ca2: {
+    type: Number,
+    min: 0,
+    max: 10,
+    default: 0
+  },
+  exam: {
+    type: Number,
+    min: 0,
+    max: 80,
+    default: 0
+  },
+  total: {
+    type: Number,
+    min: 0,
+    max: 100
+  },
+  grade: {
+    type: String,
+    enum: ['A', 'B', 'C', 'D', 'E', 'F']
+  },
+  remark: {
+    type: String
+  }
+}, { _id: false });
+
+const resultSchema = new mongoose.Schema({
+  school: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: true
+  },
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student',
+    required: true
   },
   session: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: [true, 'Session is required'] // e.g., "2023/2024"
   },
   term: {
-    type: DataTypes.ENUM('First', 'Second', 'Third'),
-    allowNull: false
+    type: String,
+    enum: ['First', 'Second', 'Third'],
+    required: true
   },
   class: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
-  subjects: {
-    type: DataTypes.JSONB, // PostgreSQL JSON type
-    defaultValue: []
-  },
+  subjects: [subjectScoreSchema],
   totalScore: {
-    type: DataTypes.FLOAT,
-    defaultValue: 0
+    type: Number,
+    default: 0
   },
   averageScore: {
-    type: DataTypes.FLOAT,
-    defaultValue: 0
+    type: Number,
+    default: 0
   },
   position: {
-    type: DataTypes.INTEGER
+    type: Number
   },
   totalStudents: {
-    type: DataTypes.INTEGER
+    type: Number
   },
   teacherComment: {
-    type: DataTypes.TEXT
+    type: String
   },
   principalComment: {
-    type: DataTypes.TEXT
+    type: String
   },
   attendance: {
-    type: DataTypes.JSONB,
-    defaultValue: { present: 0, absent: 0, total: 0 }
+    present: { type: Number, default: 0 },
+    absent: { type: Number, default: 0 },
+    total: { type: Number, default: 0 }
   },
   status: {
-    type: DataTypes.ENUM('draft', 'submitted', 'approved', 'rejected'),
-    defaultValue: 'draft'
+    type: String,
+    enum: ['draft', 'submitted', 'approved', 'rejected'],
+    default: 'draft'
   },
-  approvedById: {
-    type: DataTypes.UUID,
-    references: { model: 'Users', key: 'id' }
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
   approvedAt: {
-    type: DataTypes.DATE
+    type: Date
   },
   rejectionReason: {
-    type: DataTypes.TEXT
+    type: String
   },
-  uploadedById: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  uploadedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
 }, {
-  tableName: 'results',
-  timestamps: true,
-  indexes: [
-    { unique: true, fields: ['schoolId', 'studentId', 'session', 'term'] },
-    { fields: ['schoolId', 'session', 'term', 'status'] }
-  ],
-  hooks: {
-    beforeSave: (result) => {
-      if (result.subjects && result.subjects.length > 0) {
-        let totalScore = 0;
-        
-        result.subjects.forEach(subject => {
-          subject.total = (subject.ca1 || 0) + (subject.ca2 || 0) + (subject.exam || 0);
-          
-          if (subject.total >= 80) subject.grade = 'A';
-          else if (subject.total >= 70) subject.grade = 'B';
-          else if (subject.total >= 60) subject.grade = 'C';
-          else if (subject.total >= 50) subject.grade = 'D';
-          else if (subject.total >= 40) subject.grade = 'E';
-          else subject.grade = 'F';
-          
-          if (subject.total >= 70) subject.remark = 'Excellent';
-          else if (subject.total >= 60) subject.remark = 'Very Good';
-          else if (subject.total >= 50) subject.remark = 'Good';
-          else if (subject.total >= 40) subject.remark = 'Fair';
-          else subject.remark = 'Poor';
-          
-          totalScore += subject.total;
-        });
-        
-        result.totalScore = totalScore;
-        result.averageScore = parseFloat((totalScore / result.subjects.length).toFixed(2));
-      }
-    }
-  }
+  timestamps: true
 });
 
-module.exports = Result;
+// Calculate grades and totals before saving
+resultSchema.pre('save', function(next) {
+  if (this.subjects && this.subjects.length > 0) {
+    let totalScore = 0;
+    
+    this.subjects.forEach(subject => {
+      // Calculate total for each subject
+      subject.total = (subject.ca1 || 0) + (subject.ca2 || 0) + (subject.exam || 0);
+      
+      // Calculate grade
+      if (subject.total >= 80) subject.grade = 'A';
+      else if (subject.total >= 70) subject.grade = 'B';
+      else if (subject.total >= 60) subject.grade = 'C';
+      else if (subject.total >= 50) subject.grade = 'D';
+      else if (subject.total >= 40) subject.grade = 'E';
+      else subject.grade = 'F';
+      
+      // Remark
+      if (subject.total >= 70) subject.remark = 'Excellent';
+      else if (subject.total >= 60) subject.remark = 'Very Good';
+      else if (subject.total >= 50) subject.remark = 'Good';
+      else if (subject.total >= 40) subject.remark = 'Fair';
+      else subject.remark = 'Poor';
+      
+      totalScore += subject.total;
+    });
+    
+    this.totalScore = totalScore;
+    this.averageScore = parseFloat((totalScore / this.subjects.length).toFixed(2));
+  }
+  
+  next();
+});
+
+// Indexes
+resultSchema.index({ school: 1, student: 1, session: 1, term: 1 }, { unique: true });
+resultSchema.index({ school: 1, session: 1, term: 1, status: 1 });
+
+module.exports = mongoose.model('Result', resultSchema);

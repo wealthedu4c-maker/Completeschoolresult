@@ -1,60 +1,62 @@
-// ==== models/PIN.js ====
-const PIN = sequelize.define('PIN', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  schoolId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Schools', key: 'id' }
+const mongoose = require('mongoose');
+
+const pinSchema = new mongoose.Schema({
+  school: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: true
   },
   pin: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
+    type: String,
+    required: true,
+    unique: true,
+    uppercase: true
   },
   session: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true
   },
   term: {
-    type: DataTypes.ENUM('First', 'Second', 'Third'),
-    allowNull: false
+    type: String,
+    enum: ['First', 'Second', 'Third'],
+    required: true
   },
   isUsed: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
+    type: Boolean,
+    default: false
   },
   usedBy: {
-    type: DataTypes.JSONB
+    admissionNumber: String,
+    studentName: String,
+    usedAt: Date,
+    ipAddress: String
   },
-  attempts: {
-    type: DataTypes.JSONB,
-    defaultValue: []
-  },
+  attempts: [{
+    admissionNumber: String,
+    attemptedAt: Date,
+    ipAddress: String,
+    success: Boolean
+  }],
   maxAttempts: {
-    type: DataTypes.INTEGER,
-    defaultValue: 3
+    type: Number,
+    default: 3
   },
   expiryDate: {
-    type: DataTypes.DATE,
-    allowNull: false
+    type: Date,
+    required: true
   },
-  generatedById: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  generatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
 }, {
-  tableName: 'pins',
-  timestamps: true,
-  indexes: [
-    { fields: ['pin'] },
-    { fields: ['schoolId', 'session', 'term'] },
-    { fields: ['isUsed', 'expiryDate'] }
-  ]
+  timestamps: true
 });
 
-module.exports = PIN;
+// Indexes
+pinSchema.index({ pin: 1 });
+pinSchema.index({ school: 1, session: 1, term: 1 });
+pinSchema.index({ isUsed: 1, expiryDate: 1 });
+
+module.exports = mongoose.model('PIN', pinSchema);

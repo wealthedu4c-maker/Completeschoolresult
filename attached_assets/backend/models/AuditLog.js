@@ -1,55 +1,52 @@
-// ==== models/AuditLog.js ====
-const AuditLog = sequelize.define('AuditLog', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  userId: {
-    type: DataTypes.UUID,
-    references: { model: 'Users', key: 'id' }
+const mongoose = require('mongoose');
+
+const auditLogSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
   action: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true // e.g., 'CREATE_SCHOOL', 'UPDATE_RESULT', 'DELETE_STUDENT'
   },
   resource: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true // e.g., 'School', 'Result', 'Student'
   },
   resourceId: {
-    type: DataTypes.UUID
+    type: mongoose.Schema.Types.ObjectId
   },
   method: {
-    type: DataTypes.ENUM('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
+    type: String,
+    enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
   },
   endpoint: {
-    type: DataTypes.STRING
+    type: String
   },
   ipAddress: {
-    type: DataTypes.STRING
+    type: String
   },
   userAgent: {
-    type: DataTypes.TEXT
+    type: String
   },
   changes: {
-    type: DataTypes.JSONB
+    type: mongoose.Schema.Types.Mixed // Store old and new values
   },
   status: {
-    type: DataTypes.ENUM('success', 'failure'),
-    defaultValue: 'success'
+    type: String,
+    enum: ['success', 'failure'],
+    default: 'success'
   },
   errorMessage: {
-    type: DataTypes.TEXT
+    type: String
   }
 }, {
-  tableName: 'audit_logs',
-  timestamps: true,
-  indexes: [
-    { fields: ['userId', 'createdAt'] },
-    { fields: ['action', 'createdAt'] },
-    { fields: ['resource', 'resourceId'] }
-  ]
+  timestamps: true
 });
 
-module.exports = AuditLog;
+// Indexes
+auditLogSchema.index({ user: 1, createdAt: -1 });
+auditLogSchema.index({ action: 1, createdAt: -1 });
+auditLogSchema.index({ resource: 1, resourceId: 1 });
+
+module.exports = mongoose.model('AuditLog', auditLogSchema);

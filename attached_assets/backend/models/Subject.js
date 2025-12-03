@@ -1,41 +1,36 @@
-// ==== models/Subject.js ====
-const Subject = sequelize.define('Subject', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  schoolId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Schools', key: 'id' }
+const mongoose = require('mongoose');
+
+const subjectSchema = new mongoose.Schema({
+  school: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: true
   },
   name: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true // e.g., "Mathematics", "English Language"
   },
   code: {
-    type: DataTypes.STRING,
-    allowNull: false
+    type: String,
+    required: true,
+    uppercase: true // e.g., "MATH101", "ENG101"
   },
   category: {
-    type: DataTypes.ENUM('Core', 'Elective', 'Vocational'),
-    defaultValue: 'Core'
+    type: String,
+    enum: ['Core', 'Elective', 'Vocational'],
+    default: 'Core'
   },
   description: {
-    type: DataTypes.TEXT
+    type: String
   },
-  createdById: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: { model: 'Users', key: 'id' }
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
-}, {
-  tableName: 'subjects',
-  timestamps: true,
-  indexes: [
-    { unique: true, fields: ['schoolId', 'code'] }
-  ]
-});
+}, { timestamps: true });
 
-module.exports = Subject;
+// Compound index for uniqueness
+subjectSchema.index({ school: 1, code: 1 }, { unique: true });
+
+module.exports = mongoose.model('Subject', subjectSchema);
