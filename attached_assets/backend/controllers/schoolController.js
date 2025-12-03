@@ -1,40 +1,34 @@
-// ============================================
-// controllers/schoolController.js (COMPLETE UPDATED VERSION)
-// ============================================
-const { School, User } = require('../models');
-const { Op } = require('sequelize');
+const School = require('../models/School');
+const User = require('../models/User');
 
+// @desc    Get all schools
+// @route   GET /api/schools
+// @access  Private
 exports.getSchools = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, search, isActive } = req.query;
 
-    const where = {};
+    const query = {};
 
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { code: { [Op.iLike]: `%${search}%` } },
-        { city: { [Op.iLike]: `%${search}%` } }
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { code: { $regex: search, $options: 'i' } },
+        { city: { $regex: search, $options: 'i' } }
       ];
     }
 
     if (isActive !== undefined) {
-      where.isActive = isActive === 'true';
+      query.isActive = isActive === 'true';
     }
 
-    const schools = await School.findAll({
-      where,
-      include: [{
-        model: User,
-        as: 'createdBy',
-        attributes: ['firstName', 'lastName', 'email']
-      }],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-      order: [['createdAt', 'DESC']]
-    });
+    const schools = await School.find(query)
+      .populate('createdBy', 'firstName lastName email')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 });
 
-    const count = await School.count({ where });
+    const count = await School.countDocuments(query);
 
     res.status(200).json({
       success: true,
@@ -51,15 +45,13 @@ exports.getSchools = async (req, res, next) => {
   }
 };
 
+// @desc    Get single school
+// @route   GET /api/schools/:id
+// @access  Private
 exports.getSchool = async (req, res, next) => {
   try {
-    const school = await School.findByPk(req.params.id, {
-      include: [{
-        model: User,
-        as: 'createdBy',
-        attributes: ['firstName', 'lastName', 'email']
-      }]
-    });
+    const school = await School.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName email');
 
     if (!school) {
       return res.status(404).json({
@@ -77,9 +69,12 @@ exports.getSchool = async (req, res, next) => {
   }
 };
 
+// @desc    Create school
+// @route   POST /api/schools
+// @access  Private (Super Admin)
 exports.createSchool = async (req, res, next) => {
   try {
-    req.body.createdById = req.user.id;
+    req.body.createdBy = req.user._id;
 
     const school = await School.create(req.body);
 
@@ -93,9 +88,12 @@ exports.createSchool = async (req, res, next) => {
   }
 };
 
+// @desc    Update school
+// @route   PUT /api/schools/:id
+// @access  Private (Super Admin)
 exports.updateSchool = async (req, res, next) => {
   try {
-    const school = await School.findByPk(req.params.id);
+    let school = await School.findById(req.params.id);
 
     if (!school) {
       return res.status(404).json({
@@ -104,7 +102,10 @@ exports.updateSchool = async (req, res, next) => {
       });
     }
 
-    await school.update(req.body);
+    school = await School.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
 
     res.status(200).json({
       success: true,
@@ -116,9 +117,12 @@ exports.updateSchool = async (req, res, next) => {
   }
 };
 
+// @desc    Delete school
+// @route   DELETE /api/schools/:id
+// @access  Private (Super Admin)
 exports.deleteSchool = async (req, res, next) => {
   try {
-    const school = await School.findByPk(req.params.id);
+    const school = await School.findById(req.params.id);
 
     if (!school) {
       return res.status(404).json({
@@ -127,7 +131,8 @@ exports.deleteSchool = async (req, res, next) => {
       });
     }
 
-    const usersCount = await User.count({ where: { schoolId: req.params.id } });
+    // Check if school has users
+    const usersCount = await User.countDocuments({ school: req.params.id });
 
     if (usersCount > 0) {
       return res.status(400).json({
@@ -136,7 +141,7 @@ exports.deleteSchool = async (req, res, next) => {
       });
     }
 
-    await school.destroy();
+    await school.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -147,9 +152,12 @@ exports.deleteSchool = async (req, res, next) => {
   }
 };
 
+// @desc    Toggle school status
+// @route   PATCH /api/schools/:id/toggle-status
+// @access  Private (Super Admin)
 exports.toggleSchoolStatus = async (req, res, next) => {
   try {
-    const school = await School.findByPk(req.params.id);
+    const school = await School.findById(req.params.id);
 
     if (!school) {
       return res.status(404).json({
@@ -158,7 +166,8 @@ exports.toggleSchoolStatus = async (req, res, next) => {
       });
     }
 
-    await school.update({ isActive: !school.isActive });
+    school.isActive = !school.isActive;
+    await school.save();
 
     res.status(200).json({
       success: true,
